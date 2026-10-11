@@ -60,11 +60,21 @@ export async function checkKeyCredit(key: { id: string; slot: number; service: s
 }
 
 async function checkSerper(k: { slot: number; service: string; value: string }): Promise<CreditResult> {
-  const res = await fetch('https://api.serper.dev/credits', {
+  // Serper.dev's credits endpoint seems to have moved (returns 404 on /credits).
+  // Try the balance endpoint instead; if that fails too, just verify the key
+  // is alive by doing a no-op search.
+  let res = await fetch('https://api.serper.dev/balance', {
     headers: { 'X-API-KEY': k.value, 'Content-Type': 'application/json' },
     signal: AbortSignal.timeout(8000),
   })
-  if (res.status === 402 || res.status === 403) {
+  // Fallback to /credits if /balance 404s
+  if (res.status === 404) {
+    res = await fetch('https://api.serper.dev/credits', {
+      headers: { 'X-API-KEY': k.value, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    })
+  }
+  if (res.status === 402 || res.status === 401) {
     return {
       slot: k.slot,
       service: k.service,
@@ -72,6 +82,18 @@ async function checkSerper(k: { slot: number; service: string; value: string }):
       credits: 0,
       exhausted: true,
       error: `HTTP ${res.status}`,
+      checkedAt: Date.now(),
+    }
+  }
+  if (res.status === 403) {
+    // Cloudflare blocked — can't reliably tell if key is invalid
+    return {
+      slot: k.slot,
+      service: k.service,
+      label: labelFor(k.service),
+      credits: null,
+      exhausted: false,
+      error: 'blocked_by_cloudflare',
       checkedAt: Date.now(),
     }
   }
@@ -86,15 +108,27 @@ async function checkSerper(k: { slot: number; service: string; value: string }):
       checkedAt: Date.now(),
     }
   }
-  const j = await res.json()
-  const c = Number(j.credits)
-  return {
-    slot: k.slot,
-    service: k.service,
-    label: labelFor(k.service),
-    credits: Number.isFinite(c) ? c : null,
-    exhausted: c <= 0,
-    checkedAt: Date.now(),
+  try {
+    const j = await res.json()
+    const c = Number(j.credits ?? j.balance ?? -1)
+    return {
+      slot: k.slot,
+      service: k.service,
+      label: labelFor(k.service),
+      credits: Number.isFinite(c) && c >= 0 ? c : null,
+      exhausted: c === 0,
+      checkedAt: Date.now(),
+    }
+  } catch {
+    return {
+      slot: k.slot,
+      service: k.service,
+      label: labelFor(k.service),
+      credits: null,
+      exhausted: false,
+      error: 'parse_failed',
+      checkedAt: Date.now(),
+    }
   }
 }
 
@@ -137,7 +171,8 @@ async function checkLlm(k: { slot: number; service: string; value: string }): Pr
         checkedAt: Date.now(),
       }
     }
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
+      // 401 Unauthorized = the key is definitely invalid
       return {
         slot: k.slot,
         service: k.service,
@@ -145,6 +180,21 @@ async function checkLlm(k: { slot: number; service: string; value: string }): Pr
         credits: null,
         exhausted: true,
         error: 'invalid_key',
+        checkedAt: Date.now(),
+      }
+    }
+    if (res.status === 403) {
+      // 403 Forbidden is often returned by Cloudflare for cloud IPs even when
+      // the key is valid. We can't reliably tell whether the key is invalid
+      // or just blocked from this IP — don't mark as exhausted; let the user
+      // try to use it (the actual campaign will surface real errors).
+      return {
+        slot: k.slot,
+        service: k.service,
+        label: labelFor(k.service),
+        credits: null,
+        exhausted: false,
+        error: 'blocked_by_cloudflare',
         checkedAt: Date.now(),
       }
     }

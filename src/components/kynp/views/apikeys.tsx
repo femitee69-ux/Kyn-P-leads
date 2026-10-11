@@ -252,7 +252,11 @@ function KeySlot({
         </div>
       )}
       {existing && credit?.error && credit.credits === null && !credit.exhausted && (
-        <p className="text-[10px] text-muted-foreground">Credit check: {credit.error}</p>
+        <p className="text-[10px] text-muted-foreground">
+          {credit.error === 'blocked_by_cloudflare'
+            ? 'Credit check unavailable from server (Cloudflare blocked). The key will be tested when you start a campaign.'
+            : `Credit check: ${credit.error}`}
+        </p>
       )}
 
       {existing && !edit ? (
