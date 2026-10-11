@@ -17,9 +17,9 @@ export const API_KEY_SLOTS: { slot: number; service: string; label: string; plac
   {
     slot: 2,
     service: 'llm',
-    label: 'LLM API Key — Google Gemini (free), Groq (free), or OpenAI',
-    placeholder: 'Gemini (AIza...), Groq (gsk_...), or OpenAI (sk-...) key',
-    description: 'Used to compose personalized outreach + follow-up copy for each lead. Free options: Google Gemini (ai.google.dev), Groq (console.groq.com).',
+    label: 'Google Gemini API Key (free)',
+    placeholder: 'AIzaSy... (free key from aistudio.google.com/apikey)',
+    description: 'Used to compose personalized outreach + follow-up copy for each lead. Get a free API key at https://aistudio.google.com/apikey — 1,500 requests/day free, no credit card.',
   },
   {
     slot: 3,

@@ -73,7 +73,7 @@ export function ApiKeysView() {
           Three keys. <span className="text-kynp-yellow">Three services.</span>
         </h1>
         <p className="text-muted-foreground text-xs sm:text-sm max-w-2xl">
-          Slot 1: Serper.dev (lead discovery). Slot 2: OpenAI/LLM (message composition). Slot 3: SMTP
+          Slot 1: Serper.dev (lead discovery). Slot 2: Google Gemini (message composition). Slot 3: SMTP
           (optional, real Gmail delivery). Kyn&rsquo;P checks each key&rsquo;s credit balance every
           30s and warns here when one runs out.
         </p>
@@ -126,7 +126,7 @@ export function ApiKeysView() {
 
 const defaultSlots = [
   { slot: 1, service: 'serper', label: 'Serper.dev API Key', placeholder: 'serper.dev key', description: 'For live Google search lead discovery. Free: 2,500 credits at serper.dev.' },
-  { slot: 2, service: 'llm', label: 'LLM API Key — Gemini (free), Groq (free), or OpenAI', placeholder: 'Gemini (AIza...), Groq (gsk_...), or OpenAI (sk-...)', description: 'For composing personalized outreach. Free: ai.google.dev or console.groq.com.' },
+  { slot: 2, service: 'llm', label: 'Google Gemini API Key (free)', placeholder: 'AIzaSy... (free at aistudio.google.com/apikey)', description: 'For composing personalized outreach. Get a free key at https://aistudio.google.com/apikey — 1,500 req/day free, no credit card.' },
   { slot: 3, service: 'smtp', label: 'SMTP / Email Relay Key (optional)', placeholder: 'optional', description: 'Optional. For real Gmail delivery.' },
 ]
 

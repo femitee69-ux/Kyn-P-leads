@@ -5,20 +5,24 @@ import type { GeneratedLead, CampaignInput } from '@/lib/leads-types'
 export type { GeneratedLead, CampaignInput }
 
 /**
- * Calls the configured LLM to discover leads in the target country relevant
- * to the brand, and composes a tailored outreach message for each lead.
+ * Uses Google Gemini (free tier — https://aistudio.google.com/apikey) to
+ * compose prospect personas + outreach copy.
+ *
+ * Gemini's OpenAI-compatible endpoint is used so we don't need a separate
+ * SDK. The model is gemini-2.0-flash (free, fast, capable).
+ *
+ * Free tier limits: 15 req/min, 1,500 req/day, 1M tokens/min — plenty for
+ * Kyn'P Leads campaigns (each campaign = ~1 req for ~10 leads).
  *
  * If the user has a Serper.dev API key configured in slot 1, Kyn'P first
  * runs a real Google search via Serper to gather candidate companies & URLs,
- * then enriches them via the LLM into prospect personas + outreach copy.
+ * then enriches them via Gemini into prospect personas + outreach copy.
  *
- * The LLM key (slot 2) can be:
- *  - Google Gemini free key (starts with "AIza...") → uses gemini-1.5-flash
- *  - Groq free key (starts with "gsk_...") → uses llama-3.3-70b-versatile
- *  - OpenAI key (starts with "sk-...") → uses gpt-4o-mini
- *
- * Falls back to AI-only sample personas if no LLM key is configured.
+ * Falls back to hardcoded sample personas if no Gemini key is configured.
  */
+const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/'
+const GEMINI_MODEL = 'gemini-2.0-flash'
+
 export async function generateLeadsForCampaign(
   input: CampaignInput,
   userId: string,
@@ -41,16 +45,20 @@ export async function generateLeadsForCampaign(
   // Build the prompt (with or without Serper context)
   const prompt = buildPrompt(input, companies)
 
-  // Try to call the LLM
-  const llm = await getLlmClient(userId)
-  if (!llm) {
-    console.warn('[leads] No LLM key configured — using fallback personas')
+  // Try to call Gemini
+  const geminiKey = await getGeminiKey(userId)
+  if (!geminiKey) {
+    console.warn('[leads] No Gemini key configured — using fallback personas')
     return { leads: fallbackLeads(input) }
   }
 
   try {
-    const completion = await llm.client.chat.completions.create({
-      model: llm.model,
+    const client = new OpenAI({
+      apiKey: geminiKey,
+      baseURL: GEMINI_BASE_URL,
+    })
+    const completion = await client.chat.completions.create({
+      model: GEMINI_MODEL,
       messages: [
         {
           role: 'system',
@@ -73,48 +81,16 @@ export async function generateLeadsForCampaign(
 }
 
 /**
- * Fetches the user's LLM API key from slot 2 and detects the provider
- * based on the key prefix. Returns an OpenAI-compatible client configured
- * for the right base URL + the recommended model for that provider.
+ * Fetches the user's Gemini API key from slot 2.
+ * Returns null if not configured.
  */
-async function getLlmClient(
-  userId: string,
-): Promise<{ client: OpenAI; model: string; provider: string } | null> {
+async function getGeminiKey(userId: string): Promise<string | null> {
   const key = await db.apiKey.findFirst({
     where: { userId, slot: 2, service: 'llm', active: true },
   })
   if (!key) return null
   const value = key.value.trim()
-  if (!value) return null
-
-  let baseURL: string
-  let model: string
-  let provider: string
-
-  if (value.startsWith('AIza')) {
-    // Google Gemini OpenAI-compatible endpoint
-    baseURL = 'https://generativelanguage.googleapis.com/v1beta/openai/'
-    model = 'gemini-2.0-flash'
-    provider = 'gemini'
-  } else if (value.startsWith('gsk_')) {
-    // Groq OpenAI-compatible endpoint
-    baseURL = 'https://api.groq.com/openai/v1'
-    model = 'llama-3.3-70b-versatile'
-    provider = 'groq'
-  } else if (value.startsWith('cerebras')) {
-    // Cerebras OpenAI-compatible endpoint
-    baseURL = 'https://api.cerebras.ai/v1'
-    model = 'llama-3.3-70b'
-    provider = 'cerebras'
-  } else {
-    // Default: OpenAI
-    baseURL = 'https://api.openai.com/v1'
-    model = 'gpt-4o-mini'
-    provider = 'openai'
-  }
-
-  const client = new OpenAI({ apiKey: value, baseURL })
-  return { client, model, provider }
+  return value || null
 }
 
 async function searchSerper(

@@ -134,32 +134,21 @@ async function checkSerper(k: { slot: number; service: string; value: string }):
 
 async function checkLlm(k: { slot: number; service: string; value: string }): Promise<CreditResult> {
   /**
-   * No LLM provider has a public "credits remaining" endpoint, but we can
-   * verify the key is alive by calling a /models list endpoint. If it
-   * returns 429 (rate-limited) or 402 (quota), we mark as exhausted. If
-   * 401/403, the key is invalid. The provider endpoint depends on the key
-   * prefix:
-   *  - "AIza..."  → Google Gemini OpenAI-compatible endpoint
-   *  - "gsk_..."  → Groq OpenAI-compatible endpoint
-   *  - "cerebras" → Cerebras
-   *  - else        → OpenAI (default)
+   * Google Gemini's free API key (slot 2). We validate the key by calling
+   * Gemini's models endpoint with the key as a query parameter (Gemini's
+   * native API style).
+   *
+   * Possible responses:
+   *  - 200: key valid → not exhausted
+   *  - 400 with "API key not valid": key invalid → exhausted
+   *  - 429: rate-limited → exhausted
+   *  - 403: Cloudflare blocking (rare for Google) → don't mark as exhausted
    */
-  let baseURL: string
-  if (k.value.startsWith('AIza')) {
-    baseURL = 'https://generativelanguage.googleapis.com/v1beta/openai'
-  } else if (k.value.startsWith('gsk_')) {
-    baseURL = 'https://api.groq.com/openai/v1'
-  } else if (k.value.startsWith('cerebras')) {
-    baseURL = 'https://api.cerebras.ai/v1'
-  } else {
-    baseURL = 'https://api.openai.com/v1'
-  }
-
   try {
-    const res = await fetch(`${baseURL}/models`, {
-      headers: { Authorization: `Bearer ${k.value}` },
-      signal: AbortSignal.timeout(8000),
-    })
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(k.value)}`,
+      { signal: AbortSignal.timeout(8000) },
+    )
     if (res.status === 429 || res.status === 402) {
       return {
         slot: k.slot,
@@ -171,23 +160,19 @@ async function checkLlm(k: { slot: number; service: string; value: string }): Pr
         checkedAt: Date.now(),
       }
     }
-    if (res.status === 401) {
-      // 401 Unauthorized = the key is definitely invalid
+    if (res.status === 400) {
+      // Gemini returns 400 with "API key not valid" for invalid keys
       return {
         slot: k.slot,
         service: k.service,
         label: labelFor(k.service),
-        credits: null,
+        credits: 0,
         exhausted: true,
         error: 'invalid_key',
         checkedAt: Date.now(),
       }
     }
-    if (res.status === 403) {
-      // 403 Forbidden is often returned by Cloudflare for cloud IPs even when
-      // the key is valid. We can't reliably tell whether the key is invalid
-      // or just blocked from this IP — don't mark as exhausted; let the user
-      // try to use it (the actual campaign will surface real errors).
+    if (res.status === 401 || res.status === 403) {
       return {
         slot: k.slot,
         service: k.service,
@@ -198,12 +183,25 @@ async function checkLlm(k: { slot: number; service: string; value: string }): Pr
         checkedAt: Date.now(),
       }
     }
+    if (res.ok) {
+      // Key is valid — Gemini's free tier has 1,500 req/day. We can't easily
+      // fetch remaining quota, but we know the key works.
+      return {
+        slot: k.slot,
+        service: k.service,
+        label: labelFor(k.service),
+        credits: null,
+        exhausted: false,
+        checkedAt: Date.now(),
+      }
+    }
     return {
       slot: k.slot,
       service: k.service,
       label: labelFor(k.service),
       credits: null,
       exhausted: false,
+      error: `HTTP ${res.status}`,
       checkedAt: Date.now(),
     }
   } catch (e: any) {
