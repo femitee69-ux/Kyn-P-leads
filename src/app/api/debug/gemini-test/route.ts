@@ -70,11 +70,23 @@ No prose. No code fences. Only JSON.`
         max_tokens: 2400,
       })
       result.success = true
-      result.rawResponse = JSON.parse(JSON.stringify(completion).slice(0, 5000))
       result.responseContent = completion.choices[0]?.message?.content ?? '(empty)'
       result.responseLength = (completion.choices[0]?.message?.content ?? '').length
       result.usage = completion.usage
       result.finishReason = completion.choices[0]?.finish_reason
+      // Try to parse the response as JSON to see if it's valid
+      try {
+        const text = (completion.choices[0]?.message?.content ?? '').replace(/```json/gi, '').replace(/```/g, '').trim()
+        const start = text.indexOf('{')
+        const end = text.lastIndexOf('}')
+        const slice = start >= 0 && end > start ? text.slice(start, end + 1) : text
+        const parsed = JSON.parse(slice)
+        result.jsonParsed = true
+        result.leadsCount = Array.isArray(parsed.leads) ? parsed.leads.length : 0
+      } catch (e: any) {
+        result.jsonParsed = false
+        result.jsonError = e.message
+      }
     } catch (e: any) {
       result.success = false
       result.error = e.message

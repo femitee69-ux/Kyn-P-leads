@@ -68,7 +68,7 @@ export async function generateLeadsForCampaign(
         { role: 'user', content: prompt },
       ],
       temperature: 0.8,
-      max_tokens: 2400,
+      max_tokens: 8000,
     })
 
     const text = completion?.choices?.[0]?.message?.content ?? ''
