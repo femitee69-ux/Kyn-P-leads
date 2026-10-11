@@ -21,7 +21,7 @@ export type { GeneratedLead, CampaignInput }
  * Falls back to hardcoded sample personas if no Gemini key is configured.
  */
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/'
-const GEMINI_MODEL = 'gemini-2.0-flash'
+const GEMINI_MODEL = 'gemini-flash-latest'
 
 export async function generateLeadsForCampaign(
   input: CampaignInput,
