@@ -99,11 +99,30 @@ async function checkSerper(k: { slot: number; service: string; value: string }):
 }
 
 async function checkLlm(k: { slot: number; service: string; value: string }): Promise<CreditResult> {
-  // OpenAI has no public quota endpoint. We verify the key is alive with a
-  // GET /v1/models call — if it returns 429 (rate-limited) or 402 (quota),
-  // we mark as exhausted. Otherwise we can't know the remaining balance.
+  /**
+   * No LLM provider has a public "credits remaining" endpoint, but we can
+   * verify the key is alive by calling a /models list endpoint. If it
+   * returns 429 (rate-limited) or 402 (quota), we mark as exhausted. If
+   * 401/403, the key is invalid. The provider endpoint depends on the key
+   * prefix:
+   *  - "AIza..."  → Google Gemini OpenAI-compatible endpoint
+   *  - "gsk_..."  → Groq OpenAI-compatible endpoint
+   *  - "cerebras" → Cerebras
+   *  - else        → OpenAI (default)
+   */
+  let baseURL: string
+  if (k.value.startsWith('AIza')) {
+    baseURL = 'https://generativelanguage.googleapis.com/v1beta/openai'
+  } else if (k.value.startsWith('gsk_')) {
+    baseURL = 'https://api.groq.com/openai/v1'
+  } else if (k.value.startsWith('cerebras')) {
+    baseURL = 'https://api.cerebras.ai/v1'
+  } else {
+    baseURL = 'https://api.openai.com/v1'
+  }
+
   try {
-    const res = await fetch('https://api.openai.com/v1/models', {
+    const res = await fetch(`${baseURL}/models`, {
       headers: { Authorization: `Bearer ${k.value}` },
       signal: AbortSignal.timeout(8000),
     })

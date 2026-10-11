@@ -125,9 +125,9 @@ export function ApiKeysView() {
 }
 
 const defaultSlots = [
-  { slot: 1, service: 'serper', label: 'Serper.dev API Key', placeholder: 'serper.dev key', description: 'For live Google search lead discovery.' },
-  { slot: 2, service: 'llm', label: 'LLM / OpenAI API Key', placeholder: 'sk-…', description: 'For composing personalized outreach.' },
-  { slot: 3, service: 'smtp', label: 'SMTP / Email Relay Key', placeholder: 'optional', description: 'Optional. For real Gmail delivery.' },
+  { slot: 1, service: 'serper', label: 'Serper.dev API Key', placeholder: 'serper.dev key', description: 'For live Google search lead discovery. Free: 2,500 credits at serper.dev.' },
+  { slot: 2, service: 'llm', label: 'LLM API Key — Gemini (free), Groq (free), or OpenAI', placeholder: 'Gemini (AIza...), Groq (gsk_...), or OpenAI (sk-...)', description: 'For composing personalized outreach. Free: ai.google.dev or console.groq.com.' },
+  { slot: 3, service: 'smtp', label: 'SMTP / Email Relay Key (optional)', placeholder: 'optional', description: 'Optional. For real Gmail delivery.' },
 ]
 
 interface CreditInfo {

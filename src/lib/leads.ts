@@ -1,19 +1,23 @@
-import ZAI from 'z-ai-web-dev-sdk'
+import OpenAI from 'openai'
 import { db } from '@/lib/db'
 import type { GeneratedLead, CampaignInput } from '@/lib/leads-types'
 
 export type { GeneratedLead, CampaignInput }
 
 /**
- * Calls the Kyn'P Leads AI service to discover leads in the target country
- * relevant to the brand, and composes a tailored outreach message for each
- * lead that preaches the value of the supplied service.
+ * Calls the configured LLM to discover leads in the target country relevant
+ * to the brand, and composes a tailored outreach message for each lead.
  *
  * If the user has a Serper.dev API key configured in slot 1, Kyn'P first
  * runs a real Google search via Serper to gather candidate companies & URLs,
  * then enriches them via the LLM into prospect personas + outreach copy.
  *
- * Otherwise, falls back to an AI-only persona generator.
+ * The LLM key (slot 2) can be:
+ *  - Google Gemini free key (starts with "AIza...") → uses gemini-1.5-flash
+ *  - Groq free key (starts with "gsk_...") → uses llama-3.3-70b-versatile
+ *  - OpenAI key (starts with "sk-...") → uses gpt-4o-mini
+ *
+ * Falls back to AI-only sample personas if no LLM key is configured.
  */
 export async function generateLeadsForCampaign(
   input: CampaignInput,
@@ -37,9 +41,16 @@ export async function generateLeadsForCampaign(
   // Build the prompt (with or without Serper context)
   const prompt = buildPrompt(input, companies)
 
+  // Try to call the LLM
+  const llm = await getLlmClient(userId)
+  if (!llm) {
+    console.warn('[leads] No LLM key configured — using fallback personas')
+    return { leads: fallbackLeads(input) }
+  }
+
   try {
-    const zai = await ZAI.create()
-    const completion = await zai.chat.completions.create({
+    const completion = await llm.client.chat.completions.create({
+      model: llm.model,
       messages: [
         {
           role: 'system',
@@ -59,6 +70,51 @@ export async function generateLeadsForCampaign(
     console.error('[leads/generateLeadsForCampaign] falling back:', err)
     return { leads: fallbackLeads(input) }
   }
+}
+
+/**
+ * Fetches the user's LLM API key from slot 2 and detects the provider
+ * based on the key prefix. Returns an OpenAI-compatible client configured
+ * for the right base URL + the recommended model for that provider.
+ */
+async function getLlmClient(
+  userId: string,
+): Promise<{ client: OpenAI; model: string; provider: string } | null> {
+  const key = await db.apiKey.findFirst({
+    where: { userId, slot: 2, service: 'llm', active: true },
+  })
+  if (!key) return null
+  const value = key.value.trim()
+  if (!value) return null
+
+  let baseURL: string
+  let model: string
+  let provider: string
+
+  if (value.startsWith('AIza')) {
+    // Google Gemini OpenAI-compatible endpoint
+    baseURL = 'https://generativelanguage.googleapis.com/v1beta/openai/'
+    model = 'gemini-2.0-flash'
+    provider = 'gemini'
+  } else if (value.startsWith('gsk_')) {
+    // Groq OpenAI-compatible endpoint
+    baseURL = 'https://api.groq.com/openai/v1'
+    model = 'llama-3.3-70b-versatile'
+    provider = 'groq'
+  } else if (value.startsWith('cerebras')) {
+    // Cerebras OpenAI-compatible endpoint
+    baseURL = 'https://api.cerebras.ai/v1'
+    model = 'llama-3.3-70b'
+    provider = 'cerebras'
+  } else {
+    // Default: OpenAI
+    baseURL = 'https://api.openai.com/v1'
+    model = 'gpt-4o-mini'
+    provider = 'openai'
+  }
+
+  const client = new OpenAI({ apiKey: value, baseURL })
+  return { client, model, provider }
 }
 
 async function searchSerper(
@@ -99,7 +155,6 @@ async function searchSerper(
       // ignore single-query failures
     }
   }
-  // de-dup by URL
   const seen = new Set<string>()
   const dedup = results.filter((r) => {
     if (seen.has(r.url)) return false

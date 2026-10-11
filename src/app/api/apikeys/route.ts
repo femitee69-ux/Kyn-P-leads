@@ -12,14 +12,14 @@ export const API_KEY_SLOTS: { slot: number; service: string; label: string; plac
     service: 'serper',
     label: 'Serper.dev API Key',
     placeholder: 'serper.dev key (e.g. a1b2c3…) — for live Google web search lead discovery',
-    description: 'Used to find real prospect websites, names, and emails via Google search.',
+    description: 'Used to find real prospect websites, names, and emails via Google search. Free: 2,500 credits at serper.dev.',
   },
   {
     slot: 2,
     service: 'llm',
-    label: 'LLM / OpenAI API Key',
-    placeholder: 'OpenAI / GLM key (e.g. sk-…) — for composing personalized outreach messages',
-    description: 'Used to compose tailored outreach and follow-up copy for each lead.',
+    label: 'LLM API Key — Google Gemini (free), Groq (free), or OpenAI',
+    placeholder: 'Gemini (AIza...), Groq (gsk_...), or OpenAI (sk-...) key',
+    description: 'Used to compose personalized outreach + follow-up copy for each lead. Free options: Google Gemini (ai.google.dev), Groq (console.groq.com).',
   },
   {
     slot: 3,
