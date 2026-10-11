@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# Kyn'P Leads — public, multi-tenant lead-generation platform
+# Sign up free and start automating your outreach.
+
+Sitemap: https://kynpleads.app/sitemap.xml

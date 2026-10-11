@@ -1,0 +1,115 @@
+// Kyn'P Leads - Prisma schema (multi-tenant)
+// Lead-finding & automated outreach tool
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // Postgres provider — supports both `postgresql://...` URLs in production
+  // (Neon, Supabase, Vercel Postgres) and `file:...` URLs in local dev.
+  // Prisma treats `file:` URLs with the postgresql provider as an error
+  // though, so for local dev we recommend signing up for a free Neon DB.
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Kyn'P Leads user account (multi-tenant)
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  apiKeys       ApiKey[]
+  gmails        GmailAccount[]
+  campaigns     Campaign[]
+}
+
+/// Stored API keys (3 slots) — each slot is for a specific service.
+/// Slot 1: Serper.dev (web search for lead discovery)
+/// Slot 2: OpenAI / LLM (message composition)
+/// Slot 3: SMTP relay (optional — for real Gmail sending)
+model ApiKey {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slot      Int // 1, 2, 3
+  service   String   // 'serper' | 'llm' | 'smtp'
+  label     String
+  value     String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, slot])
+  @@index([userId])
+}
+
+/// Gmail accounts used to send outreach (up to 5 per user — optional, not compulsory).
+/// Linked via Google OAuth (one click, no app passwords). Access tokens are refreshed
+/// using the stored refresh token. We also keep the legacy `appPassword` field for
+/// backward compatibility with v1 accounts.
+model GmailAccount {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slot        Int // 1..5
+  email       String
+  appPassword String?
+  // OAuth fields (preferred path)
+  oauthRefreshToken String?
+  oauthAccessToken  String?
+  oauthExpiresAt    DateTime?
+  oauthScope        String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, slot])
+  @@index([userId])
+}
+
+/// A lead-generation campaign scoped to a user
+model Campaign {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  country     String
+  brand       String
+  service     String
+  followUp    Boolean  @default(false)
+  status      String   @default("idle") // idle | running | paused | completed
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  leads       Lead[]
+
+  @@index([userId])
+}
+
+/// A single lead discovered for a campaign + composed outreach message
+/// Follow-ups are dispatched 24h after the initial send if followUp is enabled.
+model Lead {
+  id              String   @id @default(cuid())
+  campaignId     String
+  campaign       Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  name            String
+  email           String
+  company         String
+  position        String?
+  country         String
+  message         String
+  followUpMessage String?
+  status          String   @default("pending") // pending | sent | followed_up | failed
+  sentAt          DateTime?
+  followedUpAt    DateTime?
+  gmailSlot       Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([campaignId])
+}

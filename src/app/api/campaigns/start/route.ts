@@ -1,0 +1,91 @@
+import { NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { generateLeadsForCampaign } from '@/lib/leads'
+import { requireUserId, UnauthorizedError } from '@/lib/session'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+interface StartBody {
+  country?: string
+  brand?: string
+  service?: string
+  followUp?: boolean
+}
+
+/**
+ * POST /api/campaigns/start
+ * Creates a new campaign for the signed-in user, generates leads via AI
+ * (and Serper.dev when available), composes outreach messages, and marks
+ * the campaign as "running".
+ */
+export async function POST(req: Request) {
+  try {
+    const userId = await requireUserId()
+    const body = (await req.json().catch(() => ({}))) as StartBody
+    const country = (body.country || '').trim()
+    const brand = (body.brand || '').trim()
+    const service = (body.service || '').trim()
+    const followUp = Boolean(body.followUp)
+
+    if (!country || !brand || !service) {
+      return NextResponse.json(
+        { error: 'country, brand and service are required' },
+        { status: 400 },
+      )
+    }
+
+    // Gmails are optional — we still create the campaign; messages are logged.
+    const apiKeys = await db.apiKey.findMany({ where: { userId, active: true } })
+    if (apiKeys.length === 0) {
+      return NextResponse.json(
+        { error: 'At least one API key is required to generate leads. Head to API Keys to add one.' },
+        { status: 400 },
+      )
+    }
+
+    // Generate leads + composed messages via the Kyn'P Leads service
+    // (uses Serper.dev if slot 1 is configured; otherwise AI-only fallback)
+    const generated = await generateLeadsForCampaign({ country, brand, service }, userId)
+
+    const campaign = await db.campaign.create({
+      data: {
+        userId,
+        country,
+        brand,
+        service,
+        followUp,
+        status: 'running',
+        startedAt: new Date(),
+        leads: {
+          create: generated.leads.map((l) => ({
+            name: l.name,
+            email: l.email,
+            company: l.company,
+            position: l.position ?? null,
+            country,
+            message: l.message,
+            followUpMessage: l.followUpMessage ?? null,
+            status: 'pending',
+          })),
+        },
+      },
+      include: { leads: true },
+    })
+
+    return NextResponse.json({
+      campaignId: campaign.id,
+      status: campaign.status,
+      totalLeads: campaign.leads.length,
+    })
+  } catch (err) {
+    if (err instanceof UnauthorizedError) {
+      return NextResponse.json({ error: err.message }, { status: 401 })
+    }
+    console.error('[campaigns/start] error', err)
+    return NextResponse.json(
+      { error: (err as Error).message || 'Failed to start campaign' },
+      { status: 500 },
+    )
+  }
+}
