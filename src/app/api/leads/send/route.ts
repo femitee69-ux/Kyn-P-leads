@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireUserId, UnauthorizedError } from '@/lib/session'
-import { sendGmailMessage } from '@/lib/gmail'
+import { sendEmail } from '@/lib/gmail'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -13,7 +13,8 @@ const FOLLOW_UP_DELAY_MS = 24 * 60 * 60 * 1000
  * POST /api/leads/send
  * Dispatches the next queued message for a running campaign.
  * Rotates Gmail accounts round-robin via the slot field.
- * If a Gmail OAuth account is linked, actually sends via the Gmail API.
+ * Sends via OAuth (Gmail API) OR SMTP (App Password) — both work and both
+ * result in the email appearing in the user's Gmail Sent folder.
  * Follow-ups are dispatched only after 24h of no response.
  */
 export async function POST(req: Request) {
@@ -60,9 +61,8 @@ export async function POST(req: Request) {
           orderBy: { sentAt: 'asc' },
         })
         if (follow) {
-          // Attempt real Gmail send (if OAuth linked)
           const gmails = await db.gmailAccount.findMany({
-            where: { userId, active: true, oauthRefreshToken: { not: null } },
+            where: { userId, active: true },
             orderBy: { slot: 'asc' },
           })
           let gmailSlot: number | null = null
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
             const gmail = gmails[idx % gmails.length]
             gmailSlot = gmail.slot
             try {
-              await sendGmailMessage({
+              await sendEmail({
                 gmailAccountId: gmail.id,
                 to: follow.email,
                 subject: `Re: Outreach — ${campaign.brand} × ${campaign.service}`,
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
               })
             } catch (e: any) {
               sendError = e.message
-              console.warn('[leads/send] follow-up gmail send failed:', sendError)
+              console.warn('[leads/send] follow-up send failed:', sendError)
             }
           }
           await db.lead.update({
@@ -128,35 +128,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ campaignId, status: 'completed', sent: null })
     }
 
-    // Pick a Gmail slot round-robin from the user's linked accounts (optional)
+    // Pick a Gmail slot round-robin from the user's linked accounts
     const gmails = await db.gmailAccount.findMany({
       where: { userId, active: true },
       orderBy: { slot: 'asc' },
     })
     let slot: number | null = null
     let sendError: string | undefined
-    let gmailId: string | null = null
     if (gmails.length > 0) {
       const alreadySent = await db.lead.count({
         where: { campaignId, NOT: { status: 'pending' } },
       })
       const gmail = gmails[alreadySent % gmails.length]
       slot = gmail.slot
-      gmailId = gmail.id
-      // If OAuth is linked, actually send the email
-      if (gmail.oauthRefreshToken) {
-        try {
-          await sendGmailMessage({
-            gmailAccountId: gmail.id,
-            to: next.email,
-            subject: `${campaign.brand} × ${campaign.service}`,
-            body: next.message,
-            fromName: 'Kyn\'P Leads',
-          })
-        } catch (e: any) {
-          sendError = e.message
-          console.warn('[leads/send] gmail send failed:', sendError)
-        }
+      // Send via OAuth OR SMTP — sendEmail auto-detects the best method
+      try {
+        await sendEmail({
+          gmailAccountId: gmail.id,
+          to: next.email,
+          subject: `${campaign.brand} × ${campaign.service}`,
+          body: next.message,
+          fromName: 'Kyn\'P Leads',
+        })
+      } catch (e: any) {
+        sendError = e.message
+        console.warn('[leads/send] gmail send failed:', sendError)
       }
     }
 

@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import nodemailer from 'nodemailer'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
@@ -14,7 +15,6 @@ export async function getFreshGmailAccessToken(
   const g = await db.gmailAccount.findUnique({ where: { id: gmailAccountId } })
   if (!g || !g.oauthRefreshToken) return null
 
-  // If current token still has 60+ seconds, use it.
   if (g.oauthAccessToken && g.oauthExpiresAt && g.oauthExpiresAt.getTime() > Date.now() + 60_000) {
     return { accessToken: g.oauthAccessToken, email: g.email }
   }
@@ -53,8 +53,6 @@ export async function getFreshGmailAccessToken(
 
 /**
  * Sends an email via the Gmail API using the user's OAuth access token.
- * Returns { ok: true, messageId } on success.
- * Throws on any failure.
  */
 export async function sendGmailMessage(opts: {
   gmailAccountId: string
@@ -62,7 +60,7 @@ export async function sendGmailMessage(opts: {
   subject: string
   body: string
   fromName?: string
-}): Promise<{ ok: true; messageId: string; from: string }> {
+}): Promise<{ ok: true; messageId: string; from: string; method: string }> {
   const auth = await getFreshGmailAccessToken(opts.gmailAccountId)
   if (!auth) throw new Error('Gmail account not linked via OAuth')
   const { accessToken, email } = auth
@@ -85,15 +83,101 @@ export async function sendGmailMessage(opts: {
   })
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(`Gmail send failed: ${res.status} ${text}`)
+    throw new Error(`Gmail API send failed: ${res.status} ${text}`)
   }
   const json = await res.json()
-  return { ok: true, messageId: json.id, from: email }
+  return { ok: true, messageId: json.id, from: email, method: 'gmail-api-oauth' }
 }
 
 /**
- * Builds an RFC 2822 email and base64url-encodes it for the Gmail API.
+ * Sends an email via Gmail's SMTP server using the user's App Password.
+ * This is the fallback when OAuth isn't available.
+ *
+ * Gmail SMTP settings:
+ * - Host: smtp.gmail.com
+ * - Port: 587 (STARTTLS) or 465 (SSL)
+ * - Auth: email + app password (16-char)
+ *
+ * Emails sent via SMTP DO appear in the user's Gmail Sent folder.
  */
+export async function sendViaSmtp(opts: {
+  gmailAccountId: string
+  to: string
+  subject: string
+  body: string
+  fromName?: string
+}): Promise<{ ok: true; messageId: string; from: string; method: string }> {
+  const g = await db.gmailAccount.findUnique({ where: { id: opts.gmailAccountId } })
+  if (!g) throw new Error('Gmail account not found')
+  if (!g.appPassword) throw new Error('Gmail account has no App Password — link it via "Login Gmail" or add an App Password')
+
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // SSL
+    auth: {
+      user: g.email,
+      pass: g.appPassword,
+    },
+  })
+
+  const fromHeader = opts.fromName ? `"${opts.fromName}" <${g.email}>` : g.email
+
+  const info = await transporter.sendMail({
+    from: fromHeader,
+    to: opts.to,
+    subject: opts.subject,
+    text: opts.body,
+  })
+
+  return {
+    ok: true,
+    messageId: info.messageId,
+    from: g.email,
+    method: 'gmail-smtp-app-password',
+  }
+}
+
+/**
+ * Sends an email via the best available method:
+ * 1. If the Gmail has an OAuth refresh token → use Gmail API (OAuth)
+ * 2. Else if the Gmail has an App Password → use SMTP
+ * 3. Else throw (no sending method available)
+ *
+ * Both methods result in the email appearing in the user's Gmail Sent folder.
+ */
+export async function sendEmail(opts: {
+  gmailAccountId: string
+  to: string
+  subject: string
+  body: string
+  fromName?: string
+}): Promise<{ ok: true; messageId: string; from: string; method: string }> {
+  const g = await db.gmailAccount.findUnique({ where: { id: opts.gmailAccountId } })
+  if (!g) throw new Error('Gmail account not found')
+
+  // Try OAuth first
+  if (g.oauthRefreshToken) {
+    try {
+      return await sendGmailMessage(opts)
+    } catch (e: any) {
+      console.warn(`[gmail] OAuth send failed (${e.message}), falling back to SMTP`)
+      // Fall back to SMTP if app password is available
+      if (g.appPassword) {
+        return await sendViaSmtp(opts)
+      }
+      throw e
+    }
+  }
+
+  // No OAuth — try SMTP via App Password
+  if (g.appPassword) {
+    return await sendViaSmtp(opts)
+  }
+
+  throw new Error('No sending method available — link this Gmail via "Login Gmail" (OAuth) or add an App Password')
+}
+
 function buildRawEmail(opts: {
   from: string
   to: string
