@@ -281,6 +281,54 @@ export async function searchSerperForBatch(
   return searchSerperQueries(apiKey, queries, page)
 }
 
+// Big platforms to filter out — these are articles ABOUT companies,
+// not the companies themselves. Including them gives low-quality leads
+// (e.g., contact@youtube.com instead of contact@realcompany.com).
+const BIG_PLATFORM_DOMAINS = [
+  'youtube.com', 'm.youtube.com',
+  'instagram.com',
+  'facebook.com', 'm.facebook.com', 'web.facebook.com',
+  'twitter.com', 'x.com',
+  'linkedin.com',
+  'wikipedia.org', 'en.wikipedia.org',
+  'tiktok.com',
+  'pinterest.com',
+  'reddit.com',
+  'medium.com',
+  'substack.com',
+  'quora.com',
+  'yelp.com',
+  'amazon.com',
+  'apple.com',
+  'google.com', 'play.google.com', 'apps.apple.com',
+  'pinterest.co.uk',
+  'bbc.com', 'bbc.co.uk',
+  'cnn.com', 'nytimes.com',
+  'news.google.com',
+  'tripadvisor.com',
+  'trustpilot.com',
+  'glassdoor.com',
+  'indeed.com',
+  'crunchbase.com',
+  'bloomberg.com',
+  'forbes.com', 'forbesafrica.com',
+  'entrepreneur.com',
+  'shopify.com',
+  'etsy.com',
+  'ebay.com',
+  'alibaba.com',
+  'aliexpress.com',
+]
+
+function isBigPlatform(url: string): boolean {
+  try {
+    const domain = url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].toLowerCase()
+    return BIG_PLATFORM_DOMAINS.some((p) => domain === p || domain.endsWith('.' + p))
+  } catch {
+    return false
+  }
+}
+
 async function searchSerperQueries(
   apiKey: string,
   queries: string[],
@@ -310,7 +358,11 @@ async function searchSerperQueries(
         const name = (r.title ?? '').toString().trim()
         const url = (r.link ?? '').toString().trim()
         const snippet = (r.snippet ?? '').toString().trim()
-        if (name && url) results.push({ name, url, snippet })
+        // Skip big platforms (YouTube, Instagram, Facebook, etc.)
+        // and only keep real company websites
+        if (name && url && !isBigPlatform(url)) {
+          results.push({ name, url, snippet })
+        }
       }
     } catch {
       // ignore single-query failures
