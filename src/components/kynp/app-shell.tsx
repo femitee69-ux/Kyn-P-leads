@@ -61,11 +61,14 @@ export function AppShell() {
   }, [isAuthed, qc])
 
   // Handle OAuth callback query params (?gmail_linked=N / ?gmail_error=...)
+  // Also support direct-view links like ?view=gmails, ?view=apikeys, etc.
   React.useEffect(() => {
     if (typeof window === 'undefined') return
     const url = new URL(window.location.href)
     const linked = url.searchParams.get('gmail_linked')
     const err = url.searchParams.get('gmail_error')
+    const viewParam = url.searchParams.get('view')
+
     if (linked) {
       toast.success(`Gmail slot ${linked} linked successfully.`)
       url.searchParams.delete('gmail_linked')
@@ -79,7 +82,13 @@ export function AppShell() {
       window.history.replaceState({}, '', url.toString())
       setView('gmails')
     }
-  }, [])
+    if (viewParam && isAuthed) {
+      const validViews = ['dashboard', 'campaign', 'leads', 'apikeys', 'gmails', 'history']
+      if (validViews.includes(viewParam)) {
+        setView(viewParam as any)
+      }
+    }
+  }, [isAuthed])
 
   // 30-second dispatch loop — only runs when authenticated and campaign is running
   React.useEffect(() => {
