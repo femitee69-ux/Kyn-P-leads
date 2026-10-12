@@ -64,19 +64,40 @@ export async function generateLeadsForCampaign(
       apiKey: geminiKey,
       baseURL: GEMINI_BASE_URL,
     })
-    const completion = await client.chat.completions.create({
-      model: GEMINI_MODEL,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are Kyn\'P Leads, a B2B lead-generation engine. You produce realistic, plausible prospect personas with personalized, professional outreach copy. You ALWAYS respond in strict JSON.',
-        },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.8,
-      max_tokens: 30000,
-    })
+
+    // Retry on 503 (Gemini overloaded) or 429 (rate-limited)
+    let completion
+    let lastError
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        completion = await client.chat.completions.create({
+          model: GEMINI_MODEL,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are Kyn\'P Leads, a B2B lead-generation engine. You produce realistic, plausible prospect personas with personalized, professional outreach copy. You ALWAYS respond in strict JSON.',
+            },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.8,
+          max_tokens: 30000,
+        })
+        break // success
+      } catch (e: any) {
+        lastError = e
+        const status = e.status || e.error?.[0]?.error?.code
+        if (status === 503 || status === 429) {
+          // Wait before retry: 5s, 10s, 20s
+          const waitMs = 5000 * (attempt + 1) * (attempt + 1)
+          console.warn(`[leads] Gemini returned ${status}, retrying in ${waitMs}ms (attempt ${attempt + 1}/3)`)
+          await new Promise((r) => setTimeout(r, waitMs))
+          continue
+        }
+        throw e // non-retryable error
+      }
+    }
+    if (!completion) throw lastError
 
     const text = completion?.choices?.[0]?.message?.content ?? ''
     const leads = parseLeadsJson(text, input)
