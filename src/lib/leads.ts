@@ -37,7 +37,7 @@ export async function generateLeadsForCampaign(
       const serperResults = await searchSerper(serperKey.value, input)
       // Step 2: For each company, scrape their homepage to find a real contact email
       companies = await Promise.all(
-        serperResults.slice(0, 50).map(async (c) => ({
+        serperResults.slice(0, 20).map(async (c) => ({
           ...c,
           email: await discoverEmailFromWebsite(c.url).catch(() => null),
         }))
@@ -202,16 +202,6 @@ async function searchSerper(
     `top ${input.brand} brands in ${input.country}`,
     `${input.brand} ${input.country} website contact`,
     `best ${input.brand} ${input.country}`,
-    `${input.brand} directory ${input.country}`,
-    `${input.brand} association ${input.country}`,
-    `list of ${input.brand} ${input.country}`,
-    `${input.brand} startups ${input.country}`,
-    `${input.brand} shops ${input.country}`,
-    `${input.brand} brands ${input.country} email`,
-    `${input.brand} ${input.country} owner`,
-    `${input.brand} business ${input.country} contact`,
-    `${input.brand} suppliers ${input.country}`,
-    `${input.brand} distributors ${input.country}`,
   ]
   const results: { name: string; url: string; snippet: string }[] = []
   for (const q of queries) {
