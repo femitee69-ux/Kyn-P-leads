@@ -147,7 +147,7 @@ export async function generateLeadsForCampaign(
  * - A personalized message using the campaign's country/brand/service
  * - A personalized follow-up message
  */
-function generateTemplateLeads(
+export function generateTemplateLeads(
   input: CampaignInput,
   companies: { name: string; url: string; snippet: string; email: string | null }[],
 ): GeneratedLead[] {
@@ -185,6 +185,43 @@ function generateTemplateLeads(
   })
 }
 
+/**
+ * Generates a batch of more leads for an existing campaign.
+ * Called by the dispatch endpoint when the queue is running low.
+ * Uses Serper pagination to find NEW companies (not duplicates from previous batches).
+ */
+export async function generateMoreLeads(
+  userId: string,
+  input: CampaignInput,
+  existingLeadCount: number,
+  batchSize: number = 10,
+): Promise<GeneratedLead[]> {
+  const serperKey = await db.apiKey.findFirst({
+    where: { userId, slot: 1, service: 'serper', active: true },
+  })
+  if (!serperKey) return []
+
+  // Calculate which Serper page to search (20 results per page)
+  // Page 1 = results 1-20, Page 2 = results 21-40, etc.
+  const page = Math.floor(existingLeadCount / 20) + 1
+
+  // Search Serper with pagination for unique results
+  const serperResults = await searchSerperForBatch(serperKey.value, input, page)
+  if (serperResults.length === 0) return []
+
+  // Scrape company websites for real emails
+  const companies = await Promise.all(
+    serperResults.slice(0, batchSize).map(async (c) => ({
+      ...c,
+      email: await discoverEmailFromWebsite(c.url).catch(() => null),
+    }))
+  )
+
+  console.log(`[leads] Batch page ${page}: found ${companies.length} companies, ${companies.filter(c => c.email).length} with real emails`)
+
+  return generateTemplateLeads(input, companies)
+}
+
 async function getGeminiKey(userId: string): Promise<string | null> {
   const key = await db.apiKey.findFirst({
     where: { userId, slot: 2, service: 'llm', active: true },
@@ -208,6 +245,47 @@ async function searchSerper(
     `${input.brand} ${input.country} website contact`,
     `best ${input.brand} ${input.country}`,
   ]
+  return searchSerperQueries(apiKey, queries, 1)
+}
+
+/**
+ * Searches Serper with pagination to get unique results for each batch.
+ * Used by the dispatch endpoint to generate more leads as the queue depletes.
+ */
+export async function searchSerperForBatch(
+  apiKey: string,
+  input: CampaignInput,
+  page: number,
+): Promise<{ name: string; url: string; snippet: string }[]> {
+  // Rotate through different query variations on each page to get diverse results
+  const allQueries = [
+    `${input.brand} companies ${input.country} founder`,
+    `${input.brand} ${input.country} contact email`,
+    `top ${input.brand} brands in ${input.country}`,
+    `${input.brand} ${input.country} website contact`,
+    `best ${input.brand} ${input.country}`,
+    `${input.brand} directory ${input.country}`,
+    `${input.brand} association ${input.country}`,
+    `list of ${input.brand} ${input.country}`,
+    `${input.brand} startups ${input.country}`,
+    `${input.brand} shops ${input.country}`,
+    `${input.brand} brands ${input.country} email`,
+    `${input.brand} ${input.country} owner`,
+    `${input.brand} business ${input.country} contact`,
+    `${input.brand} suppliers ${input.country}`,
+    `${input.brand} distributors ${input.country}`,
+  ]
+  // Pick 2 queries per batch (rotate through the list based on page number)
+  const startIdx = (page - 1) * 2 % allQueries.length
+  const queries = [allQueries[startIdx], allQueries[(startIdx + 1) % allQueries.length]]
+  return searchSerperQueries(apiKey, queries, page)
+}
+
+async function searchSerperQueries(
+  apiKey: string,
+  queries: string[],
+  page: number,
+): Promise<{ name: string; url: string; snippet: string }[]> {
   const results: { name: string; url: string; snippet: string }[] = []
   for (const q of queries) {
     try {
@@ -222,6 +300,7 @@ async function searchSerper(
           gl: 'us',
           hl: 'en',
           num: 20,
+          page,
         }),
       })
       if (!res.ok) continue
@@ -243,7 +322,7 @@ async function searchSerper(
     seen.add(r.url)
     return true
   })
-  return dedup.slice(0, 100)
+  return dedup
 }
 
 /**

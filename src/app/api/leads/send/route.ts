@@ -2,9 +2,15 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireUserId, UnauthorizedError } from '@/lib/session'
 import { sendEmail } from '@/lib/gmail'
+import { generateMoreLeads } from '@/lib/leads'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+/** Target number of leads per campaign */
+const TARGET_LEADS = 500
+/** When pending drops below this, generate more */
+const LOW_QUEUE_THRESHOLD = 5
 
 /** Follow-ups only fire after this delay (24 hours in ms). */
 const FOLLOW_UP_DELAY_MS = 24 * 60 * 60 * 1000
@@ -162,11 +168,44 @@ export async function POST(req: Request) {
       data: { status: 'sent', sentAt: now, gmailSlot: slot },
     })
 
+    // AFTER dispatching: check if we need to generate more leads.
+    // If pending < 5 AND total < 500, generate 10 more from Serper (next page).
+    // This lets the app build up to 500 leads over time while dispatching.
+    let newLeadsGenerated = 0
+    try {
+      const pendingCount = await db.lead.count({ where: { campaignId, status: 'pending' } })
+      const totalCount = await db.lead.count({ where: { campaignId } })
+      if (pendingCount < LOW_QUEUE_THRESHOLD && totalCount < TARGET_LEADS) {
+        console.log(`[leads/send] Queue low (${pendingCount} pending, ${totalCount} total) — generating more leads...`)
+        const moreLeads = await generateMoreLeads(userId, { country: campaign.country, brand: campaign.brand, service: campaign.service }, totalCount, 10)
+        if (moreLeads.length > 0) {
+          await db.lead.createMany({
+            data: moreLeads.map((l) => ({
+              campaignId,
+              name: l.name,
+              email: l.email,
+              company: l.company,
+              position: l.position ?? null,
+              country: campaign.country,
+              message: l.message,
+              followUpMessage: l.followUpMessage ?? null,
+              status: 'pending',
+            })),
+          })
+          newLeadsGenerated = moreLeads.length
+          console.log(`[leads/send] Added ${newLeadsGenerated} more leads (total now ${totalCount + newLeadsGenerated})`)
+        }
+      }
+    } catch (e: any) {
+      console.warn('[leads/send] Lead generation failed:', e.message)
+    }
+
     const stats = await computeStats(campaignId)
     return NextResponse.json({
       campaignId,
       sent: { ...updated, kind: 'initial', gmailSlot: slot, sendError },
       stats,
+      newLeadsGenerated,
     })
   } catch (err) {
     if (err instanceof UnauthorizedError) {
