@@ -66,8 +66,6 @@ export async function generateLeadsForCampaign(
     })
 
     // Single Gemini call — no retries (to avoid Vercel function timeout).
-    // If Gemini is overloaded (503) or rate-limited (429), fall back to
-    // sample personas immediately. The user can retry the campaign later.
     let completion
     try {
       completion = await client.chat.completions.create({
@@ -86,20 +84,26 @@ export async function generateLeadsForCampaign(
     } catch (e: any) {
       const status = e.status || e.error?.[0]?.error?.code
       if (status === 503) {
-        console.warn('[leads] Gemini overloaded (503) — falling back to sample personas')
+        console.warn('[leads] Gemini overloaded (503) — using Serper results directly with template messages')
       } else if (status === 429) {
-        console.warn('[leads] Gemini rate-limited (429) — falling back to sample personas')
+        console.warn('[leads] Gemini rate-limited (429) — using Serper results directly with template messages')
       } else {
-        console.error('[leads] Gemini call failed:', e.message)
+        console.error('[leads] Gemini call failed:', e.message, '— using Serper results directly')
       }
-      throw e
+      // Instead of hardcoded fallback, use the REAL companies from Serper
+      // with template-based personalized messages.
+      if (companies.length > 0) {
+        console.log(`[leads] Generating ${companies.length} leads from Serper results (no AI needed)`)
+        return { leads: generateTemplateLeads(input, companies) }
+      }
+      // No Serper results either → use the 6 hardcoded personas as last resort
+      return { leads: fallbackLeads(input) }
     }
 
     const text = completion?.choices?.[0]?.message?.content ?? ''
     const leads = parseLeadsJson(text, input)
 
-    // Step 5: Override AI-generated emails with REAL emails discovered via scraping
-    // (where available — this dramatically increases deliverability)
+    // Override AI-generated emails with REAL emails discovered via scraping
     const realEmailsByCompany = new Map(
       companies
         .filter((c) => c.email)
@@ -116,8 +120,62 @@ export async function generateLeadsForCampaign(
     return { leads: enrichedLeads }
   } catch (err) {
     console.error('[leads/generateLeadsForCampaign] falling back:', err)
+    // If we have Serper results, use them with template messages
+    if (companies.length > 0) {
+      return { leads: generateTemplateLeads(input, companies) }
+    }
     return { leads: fallbackLeads(input) }
   }
+}
+
+/**
+ * Generates leads from REAL company data (found by Serper.dev) using
+ * template-based personalized messages — no AI/LLM needed.
+ *
+ * This is the fallback when Gemini is overloaded (503) or unavailable.
+ * It still produces REAL leads because the companies + emails come from
+ * real Google search results + real website scraping.
+ *
+ * Each lead gets:
+ * - Real company name (from Google search results)
+ * - Real contact email (scraped from the company's website)
+ * - A personalized message using the campaign's country/brand/service
+ * - A personalized follow-up message
+ */
+function generateTemplateLeads(
+  input: CampaignInput,
+  companies: { name: string; url: string; snippet: string; email: string | null }[],
+): GeneratedLead[] {
+  return companies
+    .filter((c) => c.email) // Only include companies with a real contact email
+    .map((c, i) => {
+      const domain = c.url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]
+      const companyShort = c.name.split(' - ')[0].split(' | ')[0].slice(0, 60)
+
+      const message =
+        `Hi ${companyShort} team,\n\n` +
+        `I came across your website (${domain}) while researching ${input.brand} businesses in ${input.country}, and your work stood out to me.\n\n` +
+        `I'm reaching out from Kyn'P Leads. We help ${input.brand} operators in ${input.country} activate "${input.service}" — ` +
+        `a repeatable system that typically unlocks 10-25% more qualified pipeline within the first 45 days.\n\n` +
+        `Would you be open to a short, no-pressure call this week? I'll bring a tailored 3-step plan for ${companyShort}.\n\n` +
+        `Kyn'P — on behalf of the Kyn'P Leads network`
+
+      const followUpMessage =
+        `Hi ${companyShort} team,\n\n` +
+        `Floating this back to the top of your inbox — happy to keep it tight. ` +
+        `If "${input.service}" is a priority for ${companyShort} this quarter, I can send the tailored ` +
+        `3-step plan in advance so the call is purely a decision call.\n\n` +
+        `Kyn'P`
+
+      return {
+        name: `Contact at ${companyShort}`,
+        email: c.email!,
+        company: companyShort,
+        position: 'Founder / Owner',
+        message,
+        followUpMessage,
+      }
+    })
 }
 
 async function getGeminiKey(userId: string): Promise<string | null> {
