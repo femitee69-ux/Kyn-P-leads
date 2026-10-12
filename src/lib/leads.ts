@@ -65,10 +65,11 @@ export async function generateLeadsForCampaign(
       baseURL: GEMINI_BASE_URL,
     })
 
-    // Retry on 503 (Gemini overloaded) or 429 (rate-limited)
+    // Retry on 503 (Gemini overloaded) or 429 (rate-limited) — short waits
+    // so we don't blow past Vercel's 60s function timeout
     let completion
     let lastError
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
         completion = await client.chat.completions.create({
           model: GEMINI_MODEL,
@@ -88,10 +89,9 @@ export async function generateLeadsForCampaign(
         lastError = e
         const status = e.status || e.error?.[0]?.error?.code
         if (status === 503 || status === 429) {
-          // Wait before retry: 5s, 10s, 20s
-          const waitMs = 5000 * (attempt + 1) * (attempt + 1)
-          console.warn(`[leads] Gemini returned ${status}, retrying in ${waitMs}ms (attempt ${attempt + 1}/3)`)
-          await new Promise((r) => setTimeout(r, waitMs))
+          // Short wait: 3s only (Vercel function timeout is 60s)
+          console.warn(`[leads] Gemini returned ${status}, retrying in 3s (attempt ${attempt + 1}/2)`)
+          await new Promise((r) => setTimeout(r, 3000))
           continue
         }
         throw e // non-retryable error

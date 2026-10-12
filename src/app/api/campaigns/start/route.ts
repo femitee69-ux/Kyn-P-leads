@@ -5,6 +5,7 @@ import { requireUserId, UnauthorizedError } from '@/lib/session'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60  // Allow up to 60s for AI generation (default is 10s)
 
 interface StartBody {
   country?: string
