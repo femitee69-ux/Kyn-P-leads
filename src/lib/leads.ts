@@ -307,14 +307,17 @@ function extractEmailFromHtml(html: string, pageUrl: string): string | null {
 function isPlausibleBusinessEmail(email: string): boolean {
   const domain = email.split('@')[1] || ''
   // Skip generic email providers (these aren't company emails)
-  const genericDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com']
+  const genericDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com', 'company.com', 'email.com', 'example.com', 'yourdomain.com', 'domain.com', 'yoursite.com', 'yoursite.co']
   if (genericDomains.includes(domain)) return false
-  // Skip non-contact role accounts
+  // Skip non-contact role accounts + placeholder emails
   const localPart = email.split('@')[0]
-  const skipPrefixes = ['noreply', 'no-reply', 'donotreply', 'sentry', 'notifications', 'notification', 'wp-', 'wordpress', 'example', 'test', 'demo', 'sample']
-  if (skipPrefixes.some((p) => localPart.startsWith(p))) return false
+  const skipLocalParts = ['noreply', 'no-reply', 'donotreply', 'sentry', 'notifications', 'notification', 'wp-', 'wordpress', 'example', 'test', 'demo', 'sample', 'you', 'your', 'my', 'email', 'user', 'admin', 'info@example', 'change', 'placeholder', 'someone']
+  if (skipLocalParts.includes(localPart)) return false
+  if (skipLocalParts.some((p) => localPart.startsWith(p + '@'))) return false
   // Must have a valid TLD (at least 2 chars)
   if (!domain.includes('.')) return false
+  // Skip very short domains (probably fake)
+  if (domain.split('.')[0].length < 2) return false
   return true
 }
 
