@@ -65,39 +65,35 @@ export async function generateLeadsForCampaign(
       baseURL: GEMINI_BASE_URL,
     })
 
-    // Retry on 503 (Gemini overloaded) or 429 (rate-limited) — short waits
-    // so we don't blow past Vercel's 60s function timeout
+    // Single Gemini call — no retries (to avoid Vercel function timeout).
+    // If Gemini is overloaded (503) or rate-limited (429), fall back to
+    // sample personas immediately. The user can retry the campaign later.
     let completion
-    let lastError
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        completion = await client.chat.completions.create({
-          model: GEMINI_MODEL,
-          messages: [
-            {
-              role: 'system',
-              content:
-                'You are Kyn\'P Leads, a B2B lead-generation engine. You produce realistic, plausible prospect personas with personalized, professional outreach copy. You ALWAYS respond in strict JSON.',
-            },
-            { role: 'user', content: prompt },
-          ],
-          temperature: 0.8,
-          max_tokens: 30000,
-        })
-        break // success
-      } catch (e: any) {
-        lastError = e
-        const status = e.status || e.error?.[0]?.error?.code
-        if (status === 503 || status === 429) {
-          // Short wait: 3s only (Vercel function timeout is 60s)
-          console.warn(`[leads] Gemini returned ${status}, retrying in 3s (attempt ${attempt + 1}/2)`)
-          await new Promise((r) => setTimeout(r, 3000))
-          continue
-        }
-        throw e // non-retryable error
+    try {
+      completion = await client.chat.completions.create({
+        model: GEMINI_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are Kyn\'P Leads, a B2B lead-generation engine. You produce realistic, plausible prospect personas with personalized, professional outreach copy. You ALWAYS respond in strict JSON.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.8,
+        max_tokens: 30000,
+      })
+    } catch (e: any) {
+      const status = e.status || e.error?.[0]?.error?.code
+      if (status === 503) {
+        console.warn('[leads] Gemini overloaded (503) — falling back to sample personas')
+      } else if (status === 429) {
+        console.warn('[leads] Gemini rate-limited (429) — falling back to sample personas')
+      } else {
+        console.error('[leads] Gemini call failed:', e.message)
       }
+      throw e
     }
-    if (!completion) throw lastError
 
     const text = completion?.choices?.[0]?.message?.content ?? ''
     const leads = parseLeadsJson(text, input)
