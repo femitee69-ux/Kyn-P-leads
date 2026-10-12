@@ -6,14 +6,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   Loader2,
-  Mail,
   Send,
   CornerUpRight,
   Clock,
-  CheckCircle2,
-  Hourglass,
-  XCircle,
   RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  Mail,
+  Globe2,
+  Building2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -59,10 +60,10 @@ async function fetchLeads(campaignId?: string): Promise<LeadsResp> {
 }
 
 const STATUS_META = {
-  pending: { label: 'Queued', icon: Hourglass, color: 'text-muted-foreground', dot: 'bg-muted-foreground/40' },
-  sent: { label: 'Sent', icon: Send, color: 'text-kynp-yellow', dot: 'bg-kynp-yellow' },
-  followed_up: { label: 'Followed up', icon: CornerUpRight, color: 'text-emerald-400', dot: 'bg-emerald-400' },
-  failed: { label: 'Failed', icon: XCircle, color: 'text-red-400', dot: 'bg-red-400' },
+  pending: { label: 'Queued', color: 'text-muted-foreground', dot: 'bg-muted-foreground/40' },
+  sent: { label: 'Sent', color: 'text-kynp-yellow', dot: 'bg-kynp-yellow' },
+  followed_up: { label: 'Followed up', color: 'text-emerald-500', dot: 'bg-emerald-500' },
+  failed: { label: 'Failed', color: 'text-red-500', dot: 'bg-red-500' },
 }
 
 export function LeadsView() {
@@ -85,7 +86,7 @@ export function LeadsView() {
         failed: data.stats.failed,
       })
     }
-  }, [data?.stats])
+  }, [data?.stats, setStats])
 
   const handleManualDispatch = async () => {
     if (!campaignId) return
@@ -113,7 +114,7 @@ export function LeadsView() {
           message: sent.message,
           sentAt: sent.sentAt,
         })
-        pushLog(`Dispatched to ${sent.name} <${sent.email}> (Gmail slot ${sent.gmailSlot})`)
+        pushLog(`Dispatched to ${sent.name} <${sent.email}> · Gmail slot ${sent.gmailSlot ?? '—'}`)
       } else {
         pushLog('No more leads to dispatch.')
       }
@@ -161,7 +162,6 @@ export function LeadsView() {
         </button>
       </div>
 
-      {/* Stat row */}
       {data?.stats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <MiniStat label="Total" value={data.stats.total} />
@@ -176,7 +176,7 @@ export function LeadsView() {
         <div className="px-5 py-3.5 border-b border-foreground/10 flex items-center justify-between bg-foreground/[0.02]">
           <p className="text-sm font-medium">Outreach queue</p>
           <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1.5">
-            <Clock className="size-3" /> auto-dispatch every 30s
+            <Clock className="size-3" /> auto-dispatch every 30s · tap any lead to view message
           </span>
         </div>
         {isLoading ? (
@@ -185,43 +185,9 @@ export function LeadsView() {
           </div>
         ) : data && data.leads.length > 0 ? (
           <ul className="divide-y divide-foreground/10 max-h-[640px] overflow-y-auto kynp-scroll">
-            {data.leads.map((lead) => {
-              const meta = STATUS_META[lead.status] ?? STATUS_META.pending
-              const Icon = meta.icon
-              return (
-                <li key={lead.id} className="px-5 py-4 hover:bg-foreground/[0.02] transition-colors">
-                  <div className="flex items-start gap-3">
-                    <div className="size-9 rounded-full bg-kynp-yellow/15 text-kynp-yellow text-xs font-semibold flex items-center justify-center shrink-0">
-                      {lead.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium">{lead.name}</p>
-                        <span className={cn('text-[11px] inline-flex items-center gap-1 uppercase tracking-wider', meta.color)}>
-                          <Icon className="size-3" /> {meta.label}
-                        </span>
-                        {lead.gmailSlot && (
-                          <span className="text-[10px] text-muted-foreground">Gmail #{lead.gmailSlot}</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {lead.email} · {lead.company} {lead.position ? `· ${lead.position}` : ''}
-                      </p>
-                    </div>
-                  </div>
-                  {/* Message preview */}
-                  <div className="mt-3 ml-12 rounded-lg bg-foreground/[0.04] border border-foreground/10 px-3.5 py-3">
-                    <p className="text-xs whitespace-pre-wrap text-foreground/85 line-clamp-4">{lead.message}</p>
-                    {lead.followUpMessage && lead.status === 'followed_up' && (
-                      <div className="mt-3 pt-3 border-t border-foreground/10">
-                        <p className="text-[10px] uppercase tracking-wider text-kynp-yellow mb-1">Follow-up</p>
-                        <p className="text-xs whitespace-pre-wrap text-foreground/85 line-clamp-3">{lead.followUpMessage}</p>
-                      </div>
-                    )}
-                  </div>
-                </li>
-              )
-            })}
+            {data.leads.map((lead) => (
+              <LeadCard key={lead.id} lead={lead} />
+            ))}
           </ul>
         ) : (
           <div className="p-12 text-center text-sm text-muted-foreground">
@@ -230,6 +196,121 @@ export function LeadsView() {
         )}
       </div>
     </section>
+  )
+}
+
+function LeadCard({ lead }: { lead: LeadRow }) {
+  const [expanded, setExpanded] = React.useState(false)
+  const meta = STATUS_META[lead.status] ?? STATUS_META.pending
+  const initials = lead.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
+  const hasFollowUp = lead.followUpMessage && lead.status === 'followed_up'
+
+  return (
+    <li>
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full text-left px-5 py-4 hover:bg-foreground/[0.02] transition-colors"
+      >
+        <div className="flex items-start gap-3">
+          <div className="size-9 rounded-full bg-kynp-yellow/15 text-kynp-yellow text-xs font-semibold flex items-center justify-center shrink-0">
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-medium">{lead.name}</p>
+              <span className={cn('text-[11px] inline-flex items-center gap-1 uppercase tracking-wider', meta.color)}>
+                <span className={cn('size-1.5 rounded-full', meta.dot)} />
+                {meta.label}
+              </span>
+              {lead.gmailSlot && (
+                <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
+                  <Mail className="size-2.5" /> Gmail #{lead.gmailSlot}
+                </span>
+              )}
+              {lead.sentAt && (
+                <span className="text-[10px] text-muted-foreground">
+                  {new Date(lead.sentAt).toLocaleString()}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground truncate mt-0.5">
+              {lead.email} · {lead.company} {lead.position ? `· ${lead.position}` : ''}
+            </p>
+            <p className={cn('text-xs mt-2 text-foreground/70', !expanded && 'line-clamp-2')}>
+              {lead.message.split('\n')[0]}{lead.message.split('\n')[1] ? '...' : ''}
+            </p>
+          </div>
+          <div className="shrink-0 mt-1">
+            {expanded ? (
+              <ChevronUp className="size-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="size-4 text-muted-foreground" />
+            )}
+          </div>
+        </div>
+      </button>
+
+      {/* Expanded view — full message + follow-up */}
+      {expanded && (
+        <div className="px-5 pb-5 pt-1 ml-12 space-y-3">
+          {/* Lead metadata */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Globe2 className="size-3" /> {lead.email}
+            </div>
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Building2 className="size-3" /> {lead.company}
+            </div>
+            {lead.position && (
+              <div className="text-muted-foreground">{lead.position}</div>
+            )}
+          </div>
+
+          {/* Initial message */}
+          <div className="rounded-lg bg-foreground/[0.04] border border-foreground/10 px-3.5 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] uppercase tracking-wider text-kynp-yellow inline-flex items-center gap-1">
+                <Send className="size-3" /> Initial message
+                {lead.sentAt && (
+                  <span className="text-muted-foreground ml-2 normal-case tracking-normal">
+                    · sent {new Date(lead.sentAt).toLocaleString()}
+                  </span>
+                )}
+              </p>
+            </div>
+            <p className="text-xs whitespace-pre-wrap text-foreground/90 leading-relaxed">
+              {lead.message}
+            </p>
+          </div>
+
+          {/* Follow-up message */}
+          {lead.followUpMessage && (
+            <div className={cn(
+              'rounded-lg border px-3.5 py-3',
+              hasFollowUp
+                ? 'bg-emerald-500/[0.04] border-emerald-500/20'
+                : 'bg-foreground/[0.02] border-foreground/10',
+            )}>
+              <p className={cn(
+                'text-[10px] uppercase tracking-wider mb-2 inline-flex items-center gap-1',
+                hasFollowUp ? 'text-emerald-500' : 'text-muted-foreground',
+              )}>
+                <CornerUpRight className="size-3" />
+                {hasFollowUp ? 'Follow-up sent' : 'Follow-up ready (24h after initial)'}
+                {lead.followedUpAt && (
+                  <span className="ml-2 normal-case tracking-normal text-muted-foreground">
+                    · sent {new Date(lead.followedUpAt).toLocaleString()}
+                  </span>
+                )}
+              </p>
+              <p className="text-xs whitespace-pre-wrap text-foreground/90 leading-relaxed">
+                {lead.followUpMessage}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </li>
   )
 }
 

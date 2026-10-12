@@ -31,6 +31,35 @@ export function AppShell() {
   // landing page. Both buttons call `setAuthOpen(true)`.
   const [authOpen, setAuthOpen] = React.useState(false)
 
+  // CRITICAL: When the auth state changes (sign in / sign out), reset the
+  // entire Kyn'P store so a new user starts fresh — no leftover form data,
+  // campaign IDs, or activity logs from the previous account.
+  const prevAuthed = React.useRef(isAuthed)
+  React.useEffect(() => {
+    if (prevAuthed.current && !isAuthed) {
+      // User just signed out → reset everything
+      useKynpStore.setState({
+        view: 'dashboard',
+        sheetOpen: false,
+        campaignId: null,
+        campaignStatus: 'idle',
+        isStarting: false,
+        isDispatching: false,
+        stats: null,
+        recent: null,
+        country: '',
+        brand: '',
+        service: '',
+        followUp: false,
+        log: [],
+      })
+      // Clear all React Query caches so no stale data from the previous account
+      // appears in the new account's views.
+      qc.clear()
+    }
+    prevAuthed.current = isAuthed
+  }, [isAuthed, qc])
+
   // Handle OAuth callback query params (?gmail_linked=N / ?gmail_error=...)
   React.useEffect(() => {
     if (typeof window === 'undefined') return

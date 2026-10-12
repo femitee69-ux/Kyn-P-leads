@@ -8,15 +8,14 @@ export type { GeneratedLead, CampaignInput }
  * Uses Google Gemini (free tier — https://aistudio.google.com/apikey) to
  * compose prospect personas + outreach copy.
  *
- * Gemini's OpenAI-compatible endpoint is used so we don't need a separate
- * SDK. The model is gemini-2.0-flash (free, fast, capable).
- *
  * Free tier limits: 15 req/min, 1,500 req/day, 1M tokens/min — plenty for
- * Kyn'P Leads campaigns (each campaign = ~1 req for ~10 leads).
+ * Kyn'P Leads campaigns (each campaign = ~1 req for ~50 leads).
  *
  * If the user has a Serper.dev API key configured in slot 1, Kyn'P first
- * runs a real Google search via Serper to gather candidate companies & URLs,
- * then enriches them via Gemini into prospect personas + outreach copy.
+ * runs a real Google search via Serper to gather candidate companies & URLs.
+ * Kyn'P then scrapes each company's homepage to find REAL contact emails.
+ * The real emails are passed to Gemini as part of the prompt, so the AI
+ * generates personas BASED ON real companies with REAL email addresses.
  *
  * Falls back to hardcoded sample personas if no Gemini key is configured.
  */
@@ -27,25 +26,33 @@ export async function generateLeadsForCampaign(
   input: CampaignInput,
   userId: string,
 ): Promise<{ leads: GeneratedLead[] }> {
-  // Try Serper.dev → AI enrichment path if the user has slot 1 configured
+  // Step 1: Discover real companies via Serper.dev (if configured)
   const serperKey = await db.apiKey.findFirst({
     where: { userId, slot: 1, service: 'serper', active: true },
   })
 
-  let companies: { name: string; url: string; snippet: string }[] = []
+  let companies: { name: string; url: string; snippet: string; email: string | null }[] = []
   if (serperKey) {
     try {
-      companies = await searchSerper(serperKey.value, input)
+      const serperResults = await searchSerper(serperKey.value, input)
+      // Step 2: For each company, scrape their homepage to find a real contact email
+      companies = await Promise.all(
+        serperResults.slice(0, 15).map(async (c) => ({
+          ...c,
+          email: await discoverEmailFromWebsite(c.url).catch(() => null),
+        }))
+      )
+      console.log(`[leads] Serper discovered ${companies.length} companies, ${companies.filter(c => c.email).length} with real emails`)
     } catch (e) {
       console.warn('[leads] Serper search failed, falling back to AI only:', e)
       companies = []
     }
   }
 
-  // Build the prompt (with or without Serper context)
+  // Step 3: Build the prompt with real company data (including emails)
   const prompt = buildPrompt(input, companies)
 
-  // Try to call Gemini
+  // Step 4: Call Gemini to generate personas + messages
   const geminiKey = await getGeminiKey(userId)
   if (!geminiKey) {
     console.warn('[leads] No Gemini key configured — using fallback personas')
@@ -68,31 +75,46 @@ export async function generateLeadsForCampaign(
         { role: 'user', content: prompt },
       ],
       temperature: 0.8,
-      max_tokens: 8000,
+      max_tokens: 30000,
     })
 
     const text = completion?.choices?.[0]?.message?.content ?? ''
     const leads = parseLeadsJson(text, input)
-    return { leads }
+
+    // Step 5: Override AI-generated emails with REAL emails discovered via scraping
+    // (where available — this dramatically increases deliverability)
+    const realEmailsByCompany = new Map(
+      companies
+        .filter((c) => c.email)
+        .map((c) => [c.name.toLowerCase(), c.email!])
+    )
+    const enrichedLeads = leads.map((lead) => {
+      const realEmail = realEmailsByCompany.get(lead.company.toLowerCase())
+      if (realEmail) {
+        return { ...lead, email: realEmail }
+      }
+      return lead
+    })
+
+    return { leads: enrichedLeads }
   } catch (err) {
     console.error('[leads/generateLeadsForCampaign] falling back:', err)
     return { leads: fallbackLeads(input) }
   }
 }
 
-/**
- * Fetches the user's Gemini API key from slot 2.
- * Returns null if not configured.
- */
 async function getGeminiKey(userId: string): Promise<string | null> {
   const key = await db.apiKey.findFirst({
     where: { userId, slot: 2, service: 'llm', active: true },
   })
   if (!key) return null
-  const value = key.value.trim()
-  return value || null
+  return key.value.trim() || null
 }
 
+/**
+ * Searches Google via Serper.dev for companies matching the campaign's
+ * country + brand + service. Returns up to 15 unique results.
+ */
 async function searchSerper(
   apiKey: string,
   input: CampaignInput,
@@ -137,20 +159,110 @@ async function searchSerper(
     seen.add(r.url)
     return true
   })
-  return dedup.slice(0, 12)
+  return dedup.slice(0, 15)
+}
+
+/**
+ * Scrapes a company's homepage + /contact page to find a real contact email.
+ * Looks for mailto: links and email-pattern strings in the HTML.
+ * Returns null if no email found.
+ *
+ * This gives us REAL, verified-to-exist email addresses (at least the
+ * domain exists + the email was published publicly on the company site).
+ */
+async function discoverEmailFromWebsite(url: string): Promise<string | null> {
+  try {
+    // Normalize URL
+    let targetUrl = url
+    if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl
+
+    // Try the homepage first, then /contact if no email found
+    const candidatePaths = ['', '/contact', '/contact-us', '/about', '/team']
+    for (const path of candidatePaths) {
+      try {
+        const res = await fetch(targetUrl + path, {
+          signal: AbortSignal.timeout(5000),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; KynPLeads/1.0; +https://kynpleads.vercel.app)',
+            'Accept': 'text/html',
+          },
+          redirect: 'follow',
+        })
+        if (!res.ok) continue
+        const html = await res.text()
+        const email = extractEmailFromHtml(html, targetUrl)
+        if (email) return email
+      } catch {
+        // continue to next path
+      }
+    }
+  } catch {
+    // ignore — return null
+  }
+  return null
+}
+
+/**
+ * Extracts a plausible business email from HTML.
+ * Looks for:
+ * 1. mailto: links (highest priority — explicitly published)
+ * 2. Emails in the page content (info@, contact@, hello@ patterns)
+ * Filters out common non-contact emails (sentry, noreply, etc.)
+ */
+function extractEmailFromHtml(html: string, pageUrl: string): string | null {
+  // mailto: links — explicit published emails
+  const mailtoMatch = html.match(/mailto:([^"'?>\s]+@[^"'?>\s]+\.[^"'?>\s]+)/i)
+  if (mailtoMatch) {
+    const email = mailtoMatch[1].toLowerCase().trim()
+    if (isPlausibleBusinessEmail(email)) return email
+  }
+
+  // Bare emails in HTML content
+  const emailMatches = html.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi)
+  if (emailMatches) {
+    // Filter to plausible business emails (skip noreply, support, etc.)
+    for (const rawEmail of emailMatches) {
+      const email = rawEmail.toLowerCase()
+      if (isPlausibleBusinessEmail(email)) return email
+    }
+  }
+  return null
+}
+
+function isPlausibleBusinessEmail(email: string): boolean {
+  const domain = email.split('@')[1] || ''
+  // Skip generic email providers (these aren't company emails)
+  const genericDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com']
+  if (genericDomains.includes(domain)) return false
+  // Skip non-contact role accounts
+  const localPart = email.split('@')[0]
+  const skipPrefixes = ['noreply', 'no-reply', 'donotreply', 'sentry', 'notifications', 'notification', 'wp-', 'wordpress', 'example', 'test', 'demo', 'sample']
+  if (skipPrefixes.some((p) => localPart.startsWith(p))) return false
+  // Must have a valid TLD (at least 2 chars)
+  if (!domain.includes('.')) return false
+  return true
 }
 
 function buildPrompt(
   input: CampaignInput,
-  companies: { name: string; url: string; snippet: string }[],
+  companies: { name: string; url: string; snippet: string; email: string | null }[],
 ): string {
-  const companyBlock = companies.length
-    ? `\nUse these real companies discovered via Google for ${input.country}:\n${companies
-        .map((c, i) => `${i + 1}. ${c.name} — ${c.url} — ${c.snippet}`)
-        .join('\n')}\n`
-    : ''
+  const withEmails = companies.filter((c) => c.email)
+  const withoutEmails = companies.filter((c) => !c.email)
 
-  return `Find 10 high-intent prospect personas in ${input.country} who run or operate ${input.brand} businesses (or closely adjacent industries) and would benefit from "${input.service}".
+  let companyBlock = ''
+  if (withEmails.length > 0) {
+    companyBlock += `\nUse these REAL companies with their REAL verified contact emails (use these emails verbatim — do not invent new ones):\n`
+    companyBlock += withEmails.map((c, i) => `${i + 1}. ${c.name} — ${c.url} — contact: ${c.email}`).join('\n')
+    companyBlock += '\n'
+  }
+  if (withoutEmails.length > 0) {
+    companyBlock += `\nAlso use these real companies (generate plausible emails at their domain):\n`
+    companyBlock += withoutEmails.map((c, i) => `${i + 1}. ${c.name} — ${c.url} — ${c.snippet}`).join('\n')
+    companyBlock += '\n'
+  }
+
+  return `Find 50 high-intent prospect personas in ${input.country} who run or operate ${input.brand} businesses (or closely adjacent industries) and would benefit from "${input.service}".
 
 For each prospect, generate:
 - name: realistic full name (culturally appropriate for ${input.country})
@@ -167,7 +279,7 @@ Return STRICT JSON in this shape:
   ]
 }
 
-No prose. No code fences. Only JSON.`
+Generate exactly 50 leads. No prose. No code fences. Only JSON.`
 }
 
 function parseLeadsJson(text: string, input: CampaignInput): GeneratedLead[] {

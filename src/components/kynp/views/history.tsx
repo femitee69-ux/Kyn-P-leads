@@ -2,7 +2,8 @@
 
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { History as HistoryIcon, Globe2, Tag, Briefcase, Clock } from 'lucide-react'
+import { useKynpStore } from '@/store/kynp'
+import { History as HistoryIcon, Globe2, Tag, Briefcase, Clock, ChevronRight, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface CampaignRow {
@@ -27,12 +28,19 @@ async function fetchCampaigns(): Promise<{ campaigns: CampaignRow[] }> {
 const STATUS_COLOR: Record<string, string> = {
   running: 'text-kynp-yellow',
   paused: 'text-muted-foreground',
-  completed: 'text-emerald-400',
+  completed: 'text-emerald-500',
   idle: 'text-muted-foreground',
 }
 
 export function HistoryView() {
   const { data, isLoading } = useQuery({ queryKey: ['campaigns'], queryFn: fetchCampaigns })
+  const { setView, setCampaign } = useKynpStore()
+
+  // When a campaign is clicked, navigate to Leads view with that campaign ID
+  const openCampaign = (c: CampaignRow) => {
+    setCampaign(c.id, c.status as any)
+    setView('leads')
+  }
 
   return (
     <section className="space-y-8">
@@ -43,7 +51,7 @@ export function HistoryView() {
         </h1>
         <p className="text-muted-foreground text-sm sm:text-base max-w-2xl">
           Every campaign Kyn&rsquo;P has run for this workspace is logged here &mdash;
-          from setup to completion &mdash; with the lead count and final status.
+          from setup to completion. <strong>Tap any campaign to open its lead queue &amp; view all sent messages.</strong>
         </p>
       </div>
 
@@ -52,45 +60,72 @@ export function HistoryView() {
           Loading…
         </div>
       ) : data && data.campaigns.length > 0 ? (
-        <div className="rounded-2xl border border-foreground/10 overflow-hidden">
-          <div className="grid grid-cols-[1.6fr_1fr_1fr_auto] gap-3 px-5 py-3 border-b border-foreground/10 bg-foreground/[0.02] text-[11px] uppercase tracking-wider text-muted-foreground">
-            <span>Campaign</span>
-            <span>Leads</span>
-            <span>Started</span>
-            <span>Status</span>
-          </div>
-          <ul className="divide-y divide-foreground/10">
-            {data.campaigns.map((c) => (
-              <li
-                key={c.id}
-                className="grid grid-cols-[1.6fr_1fr_1fr_auto] gap-3 px-5 py-3.5 items-center hover:bg-foreground/[0.02] transition-colors"
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2 text-sm">
-                    <span className="inline-flex items-center gap-1 font-medium truncate">
-                      <Globe2 className="size-3 text-kynp-yellow shrink-0" /> {c.country}
+        <div className="space-y-3">
+          {data.campaigns.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => openCampaign(c)}
+              className="group w-full text-left rounded-2xl border border-foreground/10 bg-foreground/[0.02] hover:bg-foreground/[0.04] hover:border-foreground/20 transition-all p-5 cursor-pointer"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      'size-2 rounded-full shrink-0',
+                      c.status === 'running' ? 'bg-kynp-yellow kynp-live-dot' :
+                      c.status === 'completed' ? 'bg-emerald-500' :
+                      'bg-muted-foreground/40'
+                    )} />
+                    <span className={cn(
+                      'text-[10px] uppercase tracking-wider font-medium',
+                      STATUS_COLOR[c.status] ?? 'text-muted-foreground'
+                    )}>
+                      {c.status}
+                    </span>
+                    {c.followUp && (
+                      <span className="text-[10px] uppercase tracking-wider text-kynp-yellow/70 border border-kynp-yellow/30 rounded-full px-2 py-0.5">
+                        Follow-ups on
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                    <span className="inline-flex items-center gap-1.5 font-medium">
+                      <Globe2 className="size-3.5 text-kynp-yellow shrink-0" /> {c.country}
                     </span>
                     <span className="text-muted-foreground">·</span>
-                    <span className="inline-flex items-center gap-1 font-medium truncate">
-                      <Tag className="size-3 text-kynp-yellow shrink-0" /> {c.brand}
+                    <span className="inline-flex items-center gap-1.5 font-medium">
+                      <Tag className="size-3.5 text-kynp-yellow shrink-0" /> {c.brand}
                     </span>
                     <span className="text-muted-foreground">·</span>
-                    <span className="inline-flex items-center gap-1 text-muted-foreground truncate">
-                      <Briefcase className="size-3 shrink-0" /> {c.service}
+                    <span className="inline-flex items-center gap-1.5 text-muted-foreground truncate">
+                      <Briefcase className="size-3.5 shrink-0" /> {c.service}
                     </span>
                   </div>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                    <span className="inline-flex items-center gap-1">
+                      <Users className="size-3" /> {c._count.leads} leads
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="size-3" />
+                      {c.startedAt ? new Date(c.startedAt).toLocaleString() : 'not started'}
+                    </span>
+                    {c.completedAt && (
+                      <span className="inline-flex items-center gap-1 text-emerald-500/70">
+                        completed {new Date(c.completedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="text-sm tabular-nums">{c._count.leads}</span>
-                <span className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
-                  <Clock className="size-3" />
-                  {c.startedAt ? new Date(c.startedAt).toLocaleString() : '—'}
-                </span>
-                <span className={cn('text-[11px] uppercase tracking-wider font-medium', STATUS_COLOR[c.status] ?? 'text-muted-foreground')}>
-                  {c.status}
-                </span>
-              </li>
-            ))}
-          </ul>
+
+                <div className="shrink-0 flex items-center gap-2 text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+                  <span className="hidden sm:inline">View leads</span>
+                  <ChevronRight className="size-4 group-hover:translate-x-0.5 transition-transform" />
+                </div>
+              </div>
+            </button>
+          ))}
         </div>
       ) : (
         <div className="rounded-2xl border border-dashed border-foreground/15 p-12 text-center">
