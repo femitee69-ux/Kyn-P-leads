@@ -45,8 +45,8 @@ export async function POST(req: Request) {
       )
     }
 
-    // Generate leads + composed messages via the Kyn'P Leads service
-    // (uses Serper.dev if slot 1 is configured; otherwise AI-only fallback)
+    // Generate leads — the first batch is generated now (fast: just Serper + template)
+    // More leads are generated on-the-fly by the dispatch endpoint as the queue depletes.
     const generated = await generateLeadsForCampaign({ country, brand, service }, userId)
 
     const campaign = await db.campaign.create({
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
         status: 'running',
         startedAt: new Date(),
         leads: {
-          create: generated.leads.map((l) => ({
+          create: generated.leads.slice(0, 10).map((l) => ({
             name: l.name,
             email: l.email,
             company: l.company,
@@ -73,6 +73,24 @@ export async function POST(req: Request) {
       },
       include: { leads: true },
     })
+
+    // Save the remaining generated leads as "pending" too (so the dispatch loop
+    // can start immediately while the user watches the queue fill up)
+    if (generated.leads.length > 10) {
+      await db.lead.createMany({
+        data: generated.leads.slice(10).map((l) => ({
+          campaignId: campaign.id,
+          name: l.name,
+          email: l.email,
+          company: l.company,
+          position: l.position ?? null,
+          country,
+          message: l.message,
+          followUpMessage: l.followUpMessage ?? null,
+          status: 'pending',
+        })),
+      })
+    }
 
     return NextResponse.json({
       campaignId: campaign.id,

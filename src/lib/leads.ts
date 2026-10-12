@@ -37,7 +37,7 @@ export async function generateLeadsForCampaign(
       const serperResults = await searchSerper(serperKey.value, input)
       // Step 2: For each company, scrape their homepage to find a real contact email
       companies = await Promise.all(
-        serperResults.slice(0, 20).map(async (c) => ({
+        serperResults.slice(0, 50).map(async (c) => ({
           ...c,
           email: await discoverEmailFromWebsite(c.url).catch(() => null),
         }))
@@ -157,17 +157,17 @@ function generateTemplateLeads(
     const message =
       `Hi ${companyShort} team,\n\n` +
       `I came across your website (${domain}) while researching ${input.brand} businesses in ${input.country}, and your work stood out to me.\n\n` +
-      `I'm reaching out from Kyn'P Leads. We help ${input.brand} operators in ${input.country} activate "${input.service}" — ` +
+      `I'm reaching out because we help ${input.brand} operators in ${input.country} activate "${input.service}" — ` +
       `a repeatable system that typically unlocks 10-25% more qualified pipeline within the first 45 days.\n\n` +
-      `Would you be open to a short, no-pressure call this week? I'll bring a tailored 3-step plan for ${companyShort}.\n\n` +
-      `Kyn'P — on behalf of the Kyn'P Leads network`
+      `Would you be open to a short, no-pressure call this week? I can share a tailored 3-step plan for ${companyShort}.\n\n` +
+      `Looking forward to connecting.`
 
     const followUpMessage =
       `Hi ${companyShort} team,\n\n` +
-      `Floating this back to the top of your inbox — happy to keep it tight. ` +
+      `Just following up on my previous email — happy to keep this brief. ` +
       `If "${input.service}" is a priority for ${companyShort} this quarter, I can send the tailored ` +
-      `3-step plan in advance so the call is purely a decision call.\n\n` +
-      `Kyn'P`
+      `3-step plan in advance so any call is purely a decision call.\n\n` +
+      `Best regards.`
 
     return {
       name: `Contact at ${companyShort}`,
@@ -202,6 +202,16 @@ async function searchSerper(
     `top ${input.brand} brands in ${input.country}`,
     `${input.brand} ${input.country} website contact`,
     `best ${input.brand} ${input.country}`,
+    `${input.brand} directory ${input.country}`,
+    `${input.brand} association ${input.country}`,
+    `list of ${input.brand} ${input.country}`,
+    `${input.brand} startups ${input.country}`,
+    `${input.brand} shops ${input.country}`,
+    `${input.brand} brands ${input.country} email`,
+    `${input.brand} ${input.country} owner`,
+    `${input.brand} business ${input.country} contact`,
+    `${input.brand} suppliers ${input.country}`,
+    `${input.brand} distributors ${input.country}`,
   ]
   const results: { name: string; url: string; snippet: string }[] = []
   for (const q of queries) {
@@ -216,7 +226,7 @@ async function searchSerper(
           q,
           gl: 'us',
           hl: 'en',
-          num: 10,
+          num: 20,
         }),
       })
       if (!res.ok) continue
@@ -238,7 +248,7 @@ async function searchSerper(
     seen.add(r.url)
     return true
   })
-  return dedup.slice(0, 25)
+  return dedup.slice(0, 100)
 }
 
 /**
@@ -351,7 +361,7 @@ For each prospect, generate:
 - email: a plausible business email at their company domain (lowercase)
 - company: a plausible business name${companyBlock ? ' — prefer the real ones listed below' : ''}
 - position: their role (Founder, Owner, Marketing Director, Operations Lead, etc.)
-- message: a personalized cold-outreach email (120-180 words) that preaches how "${input.service}" helps their ${input.brand} business specifically. Be specific, professional, and value-first. Sign off as "Kyn'P — on behalf of the Kyn'P Leads network".
+- message: a personalized cold-outreach email (120-180 words) that preaches how "${input.service}" helps their ${input.brand} business specifically. Be specific, professional, and value-first. Do not include any app name or brand name in the sign-off. Sign off naturally as 'Looking forward to connecting.'
 - followUpMessage: a 60-90 word polite follow-up email to be sent 24 hours later if no reply.${companyBlock}
 
 Return STRICT JSON in this shape:
@@ -410,19 +420,19 @@ function fallbackLeads({ country, brand, service }: CampaignInput): GeneratedLea
         `Hi ${first},\n\n` +
         `I came across ${s.company} while mapping the ${brand} landscape in ${country}, ` +
         `and was struck by the work your team is doing.\n\n` +
-        `At Kyn'P Leads, we help ${brand} operators in ${country} activate "${service}" — ` +
+        `We help ${brand} operators in ${country} activate "${service}" — ` +
         `not as theory, but as a repeatable system your team can run weekly. ` +
         `For a brand of your scale and creative ambition, "${service}" typically unlocks ` +
         `10-25% more qualified pipeline inside the first 45 days.\n\n` +
-        `Would you be open to a short, no-pressure call this week? I'll bring a tailored ` +
+        `Would you be open to a short, no-pressure call this week? I can share a tailored ` +
         `3-step plan for ${s.company}.\n\n` +
-        `Kyn'P — on behalf of the Kyn'P Leads network`,
+        `Looking forward to connecting.`,
       followUpMessage:
         `Hi ${first},\n\n` +
-        `Floating this back to the top of your inbox — happy to keep it tight. ` +
+        `Just following up on my previous email — happy to keep this brief. ` +
         `If "${service}" is a priority for ${s.company} this quarter, I can send the tailored ` +
-        `3-step plan in advance so the call is purely a decision call.\n\n` +
-        `Kyn'P`,
+        `3-step plan in advance so any call is purely a decision call.\n\n` +
+        `Best regards.`,
     }
   })
 }
