@@ -49,10 +49,15 @@ export async function generateLeadsForCampaign(
     }
   }
 
-  // Step 3: Build the prompt with real company data (including emails)
-  const prompt = buildPrompt(input, companies)
+  // Step 3: If we have real companies from Serper, use template leads directly.
+  // This is FAST (~20s total) and produces REAL leads with REAL emails.
+  // Gemini AI-composed messages are optional — only tried if Serper has no results.
+  if (companies.length > 0) {
+    console.log(`[leads] Using ${companies.length} real companies from Serper (template messages, no AI needed)`)
+    return { leads: generateTemplateLeads(input, companies) }
+  }
 
-  // Step 4: Call Gemini to generate personas + messages
+  // Step 4: No Serper results → try Gemini for AI-composed leads
   const geminiKey = await getGeminiKey(userId)
   if (!geminiKey) {
     console.warn('[leads] No Gemini key configured — using fallback personas')
