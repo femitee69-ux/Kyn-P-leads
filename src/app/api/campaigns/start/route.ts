@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { randomBytes } from 'crypto'
 import { db } from '@/lib/db'
 import { generateLeadsForCampaign } from '@/lib/leads'
 import { requireUserId, UnauthorizedError } from '@/lib/session'
@@ -14,6 +15,7 @@ interface StartBody {
   targetAudience?: string
   followUp?: boolean
   gmailSlots?: number[]
+  targetLeads?: number
 }
 
 /**
@@ -30,6 +32,7 @@ export async function POST(req: Request) {
     const brand = (body.brand || '').trim()
     const service = (body.service || '').trim()
     const targetAudience = (body.targetAudience || '').trim()
+    const targetLeads = body.targetLeads || 500
     const followUp = Boolean(body.followUp)
 
     if (!country || !brand || !service) {
@@ -68,6 +71,8 @@ export async function POST(req: Request) {
         service,
         targetAudience: targetAudience || null,
         followUp,
+        targetLeads,
+        cronToken: randomBytes(16).toString('hex'),
         status: 'running',
         startedAt: new Date(),
         leads: {
@@ -104,10 +109,15 @@ export async function POST(req: Request) {
       })
     }
 
+    const cronUrl = `${process.env.NEXTAUTH_URL || 'https://kyn-p-leads.vercel.app'}/api/leads/cron?campaignId=${campaign.id}&token=${campaign.cronToken}`
+
     return NextResponse.json({
       campaignId: campaign.id,
       status: campaign.status,
       totalLeads: campaign.leads.length,
+      targetLeads,
+      cronUrl,
+      cronToken: campaign.cronToken,
     })
   } catch (err) {
     if (err instanceof UnauthorizedError) {

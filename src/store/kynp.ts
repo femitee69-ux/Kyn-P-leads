@@ -50,9 +50,10 @@ interface KynpState {
   brand: string
   service: string
   targetAudience: string
+  targetLeads: number
   followUp: boolean
   selectedGmailSlots: number[]
-  setForm: (patch: Partial<Pick<KynpState, 'country' | 'brand' | 'service' | 'targetAudience' | 'followUp' | 'selectedGmailSlots'>>) => void
+  setForm: (patch: Partial<Pick<KynpState, 'country' | 'brand' | 'service' | 'targetAudience' | 'targetLeads' | 'followUp' | 'selectedGmailSlots'>>) => void
 
   // last activity log
   log: string[]
@@ -83,6 +84,7 @@ export const useKynpStore = create<KynpState>((set) => ({
   brand: '',
   service: '',
   targetAudience: '',
+  targetLeads: 500,
   followUp: false,
   selectedGmailSlots: [],
   setForm: (patch) => set(patch),

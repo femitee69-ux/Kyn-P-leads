@@ -51,6 +51,7 @@ export function AppShell() {
         brand: '',
         service: '',
         targetAudience: '',
+        targetLeads: 500,
         followUp: false,
         selectedGmailSlots: [],
         log: [],

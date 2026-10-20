@@ -17,6 +17,7 @@ import {
   AlertCircle,
   Check,
   Users,
+  Target,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -52,7 +53,7 @@ function validateService(v: string): string | null {
 
 export function CampaignView() {
   const {
-    country, brand, service, targetAudience, followUp, selectedGmailSlots,
+    country, brand, service, targetAudience, targetLeads, followUp, selectedGmailSlots,
     setForm, isStarting, setStarting,
     setCampaign, setView, pushLog,
   } = useKynpStore()
@@ -113,13 +114,18 @@ export function CampaignView() {
       const res = await fetch('/api/campaigns/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ country, brand, service, targetAudience, followUp, gmailSlots: selectedGmailSlots }),
+        body: JSON.stringify({ country, brand, service, targetAudience, targetLeads, followUp, gmailSlots: selectedGmailSlots }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Start failed')
       setCampaign(json.campaignId, 'running')
-      pushLog(`Campaign started: ${json.totalLeads} leads generated.`)
-      toast.success(`Campaign started — ${json.totalLeads} leads ready to dispatch.`)
+      pushLog(`Campaign started: ${json.totalLeads} leads generated. Target: ${json.targetLeads || 500}.`)
+      toast.success(`Campaign started — ${json.totalLeads} leads ready.`)
+      // Show the cron URL for server-side dispatch
+      if (json.cronUrl) {
+        pushLog(`Server-side dispatch URL: ${json.cronUrl}`)
+        toast.info('Copy the cron URL from the activity log to set up 24/7 auto-dispatch via cron-job.org', { duration: 8000 })
+      }
       qc.invalidateQueries({ queryKey: ['status'] })
       setView('leads')
     } catch (e: any) {
@@ -236,6 +242,15 @@ export function CampaignView() {
           value={targetAudience}
           onChange={(v) => setForm({ targetAudience: v })}
           placeholder="e.g. founders and marketing directors of skincare brands"
+        />
+
+        <Field
+          icon={<Target className="size-4 text-kynp-yellow" />}
+          label="Target leads count"
+          hint="How many leads do you want? The app stops automatically when this number is reached."
+          value={String(targetLeads)}
+          onChange={(v) => setForm({ targetLeads: parseInt(v) || 500 })}
+          placeholder="500"
         />
 
         {/* Gmail selection — compulsory */}

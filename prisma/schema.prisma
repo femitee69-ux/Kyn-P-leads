@@ -82,6 +82,8 @@ model Campaign {
   service         String
   targetAudience  String?
   followUp        Boolean  @default(false)
+  targetLeads     Int      @default(500)
+  cronToken       String?
   status          String   @default("idle") // idle | running | paused | completed
   startedAt       DateTime?
   completedAt     DateTime?
