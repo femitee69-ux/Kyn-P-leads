@@ -68,10 +68,10 @@ export function AccountSheet() {
         {/* Account chip */}
         <div className="px-6 py-4 border-b border-foreground/10 flex items-center gap-3">
           <div className="size-9 rounded-full bg-kynp-yellow text-kynp-black font-semibold text-sm flex items-center justify-center">
-            {initials}
+            👑
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{displayName}</p>
+            <p className="text-sm font-medium truncate">BOSS</p>
             <p className="text-xs text-muted-foreground truncate">{email || 'Not signed in'}</p>
           </div>
           <SignOutButton />

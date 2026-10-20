@@ -121,9 +121,9 @@ export function TopBar() {
               className="flex items-center gap-2 rounded-full border border-foreground/10 bg-foreground/[0.03] hover:bg-foreground/[0.06] transition-colors pl-1.5 pr-2 sm:pr-3 py-1.5"
             >
               <span className="size-6 sm:size-7 rounded-full bg-kynp-yellow text-kynp-black text-[10px] sm:text-xs font-semibold flex items-center justify-center">
-                {(session?.user?.email || 'KP').split('@')[0].slice(0, 2).toUpperCase()}
+                👑
               </span>
-              <span className="hidden sm:inline text-xs font-medium">Account</span>
+              <span className="hidden sm:inline text-xs font-medium">BOSS</span>
             </button>
           )}
         </div>

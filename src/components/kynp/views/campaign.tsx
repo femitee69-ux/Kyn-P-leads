@@ -51,7 +51,7 @@ function validateService(v: string): string | null {
 
 export function CampaignView() {
   const {
-    country, brand, service, followUp,
+    country, brand, service, followUp, selectedGmailSlots,
     setForm, isStarting, setStarting,
     setCampaign, setView, pushLog,
   } = useKynpStore()
@@ -61,24 +61,39 @@ export function CampaignView() {
     queryFn: fetchStatus,
     refetchInterval: 8000,
   })
+
+  // Fetch linked Gmails for the selection
+  const { data: gmailsData } = useQuery({
+    queryKey: ['gmails'],
+    queryFn: async () => {
+      const res = await fetch('/api/gmails', { cache: 'no-store' })
+      if (!res.ok) throw new Error('failed')
+      return res.json()
+    },
+  })
+
   const [touched, setTouched] = React.useState<{ [k: string]: boolean }>({})
 
   const gmailsReady = (data?.gmails.count ?? 0) > 0
   const keysReady = (data?.apiKeys.count ?? 0) > 0
   const exhaustedKey = data?.credits?.find((c) => c.exhausted)
 
+  const activeGmails = (gmailsData?.gmails ?? []).filter((g: any) => g.active)
+  const hasGmails = activeGmails.length > 0
+  const hasGmailSelected = selectedGmailSlots.length > 0
+
   // Inline errors
   const countryErr = touched.country ? validateCountry(country) : null
   const brandErr = touched.brand ? validateBrand(brand) : null
   const serviceErr = touched.service ? validateService(service) : null
 
-  // Block submit unless all fields are valid
+  // Block submit unless all fields are valid + at least 1 Gmail selected
   const formValid =
-    !validateCountry(country) && !validateBrand(brand) && !validateService(service)
+    !validateCountry(country) && !validateBrand(brand) && !validateService(service) && hasGmailSelected
 
   // Block when API keys exhausted
   const blocked = !!exhaustedKey
-  const canStart = keysReady && formValid && !isStarting && !blocked
+  const canStart = keysReady && formValid && !isStarting && !blocked && hasGmailSelected
 
   const handleStart = async () => {
     setTouched({ country: true, brand: true, service: true })
@@ -212,6 +227,46 @@ export function CampaignView() {
           textarea
           error={serviceErr}
         />
+
+        {/* Gmail selection — compulsory */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Mail className="size-4 text-kynp-yellow" />
+            <label className="text-sm font-medium">Select Gmail(s) to send from</label>
+            <span className="text-[10px] text-kynp-yellow uppercase tracking-wider">Required</span>
+          </div>
+          <p className="text-xs text-muted-foreground">Pick which Gmail account(s) will send the outreach. Multiple Gmails rotate automatically.</p>
+          {activeGmails.length === 0 ? (
+            <div className="rounded-lg border border-kynp-yellow/40 bg-kynp-yellow/[0.06] p-3 text-xs text-muted-foreground">
+              No Gmails linked. <button onClick={() => setView('gmails')} className="text-kynp-yellow font-medium underline">Link a Gmail first →</button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {activeGmails.map((g: any) => (
+                <label key={g.slot} className="flex items-center gap-3 rounded-lg border border-foreground/10 p-3 cursor-pointer hover:bg-foreground/[0.03]">
+                  <input
+                    type="checkbox"
+                    checked={selectedGmailSlots.includes(g.slot)}
+                    onChange={(e) => {
+                      const next = e.target.checked
+                        ? [...selectedGmailSlots, g.slot]
+                        : selectedGmailSlots.filter((s) => s !== g.slot)
+                      setForm({ selectedGmailSlots: next })
+                    }}
+                    className="size-4 accent-kynp-yellow"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{g.email}</p>
+                    <p className="text-[11px] text-muted-foreground">Slot {g.slot}</p>
+                  </div>
+                </label>
+              ))}
+              {!hasGmailSelected && (
+                <p className="text-[11px] text-red-500">Select at least 1 Gmail to start the campaign.</p>
+              )}
+            </div>
+          )}
+        </div>
 
         <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-foreground/10 p-4 hover:bg-foreground/[0.03] transition-colors">
           <input

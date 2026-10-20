@@ -51,6 +51,7 @@ export function AppShell() {
         brand: '',
         service: '',
         followUp: false,
+        selectedGmailSlots: [],
         log: [],
       })
       // Clear all React Query caches so no stale data from the previous account
