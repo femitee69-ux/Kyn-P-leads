@@ -12,7 +12,7 @@ import { db } from '@/lib/db'
  *   every API route can scope data to the authenticated user.
  */
 export const authOptions: NextAuthOptions = {
-  session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 }, // 30d
+  session: { strategy: 'jwt', maxAge: 10 * 365 * 24 * 60 * 60 }, // 10 years — permanent login
   pages: {
     // Not actually routed (we only have `/`) — kept for completeness.
     signIn: '/',

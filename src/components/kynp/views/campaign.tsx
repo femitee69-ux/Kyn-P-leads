@@ -119,13 +119,8 @@ export function CampaignView() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Start failed')
       setCampaign(json.campaignId, 'running')
-      pushLog(`Campaign started: ${json.totalLeads} leads generated. Target: ${json.targetLeads || 500}.`)
-      toast.success(`Campaign started — ${json.totalLeads} leads ready.`)
-      // Show the cron URL for server-side dispatch
-      if (json.cronUrl) {
-        pushLog(`Server-side dispatch URL: ${json.cronUrl}`)
-        toast.info('Copy the cron URL from the activity log to set up 24/7 auto-dispatch via cron-job.org', { duration: 8000 })
-      }
+      pushLog(`Campaign started: ${json.totalLeads} leads generated. Target: ${json.targetLeads || 500} leads.`)
+      toast.success(`Campaign started — ${json.totalLeads} leads ready. Keep this tab open for 30s auto-dispatch.`)
       qc.invalidateQueries({ queryKey: ['status'] })
       setView('leads')
     } catch (e: any) {
