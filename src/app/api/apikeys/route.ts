@@ -11,22 +11,8 @@ export const API_KEY_SLOTS: { slot: number; service: string; label: string; plac
     slot: 1,
     service: 'serper',
     label: 'Serper.dev API Key',
-    placeholder: 'serper.dev key (e.g. a1b2c3…) — for live Google web search lead discovery',
-    description: 'Used to find real prospect websites, names, and emails via Google search. Free: 2,500 credits at serper.dev.',
-  },
-  {
-    slot: 2,
-    service: 'llm',
-    label: 'Google Gemini API Key (free)',
-    placeholder: 'AIzaSy... (free key from aistudio.google.com/apikey)',
-    description: 'Used to compose personalized outreach + follow-up copy for each lead. Get a free API key at https://aistudio.google.com/apikey — 1,500 requests/day free, no credit card.',
-  },
-  {
-    slot: 3,
-    service: 'smtp',
-    label: 'SMTP / Email Relay Key (optional)',
-    placeholder: 'SMTP API key — for real Gmail sending (optional, not required)',
-    description: 'Optional. If provided, Kyn\'P will actually deliver emails. Otherwise messages are logged for review.',
+    placeholder: 'serper.dev key (32-char hex string)',
+    description: 'Searches Google to find real company websites in your target country. Free: 2,500 credits at serper.dev. Without this, the app can\'t find real leads.',
   },
 ]
 
