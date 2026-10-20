@@ -184,54 +184,38 @@ export function AppShell() {
             {view === 'history' && <HistoryView />}
           </>
         ) : (
-          <LandingView onPrimary={() => setAuthOpen(true)} />
+          <PhoneLoginView onPhoneLogin={() => setAuthOpen(true)} />
         )}
       </main>
 
-      {isAuthed ? <ActivityLogFooter /> : <LandingFooter />}
+      {isAuthed && <ActivityLogFooter />}
     </div>
   )
 }
 
-function LandingView({ onPrimary }: { onPrimary: () => void }) {
+function PhoneLoginView({ onPhoneLogin }: { onPhoneLogin: () => void }) {
   return (
-    <section className="flex flex-col items-center justify-center text-center py-8 sm:py-16 max-w-2xl mx-auto">
-      <div className="size-16 sm:size-20 rounded-full overflow-hidden flex items-center justify-center mb-6">
-        <img src="/logo.png" alt="Kyn'P Leads" className="size-16 sm:size-20 object-cover" />
+    <section className="flex flex-col items-center justify-center text-center py-8 sm:py-12 max-w-md mx-auto">
+      <div className="size-20 rounded-full overflow-hidden flex items-center justify-center mb-6">
+        <img src="/logo.png" alt="Kyn'P Leads" className="size-20 object-cover" />
       </div>
-      <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-[1.05]">
-        Find. Compose. Send. <br />
-        <span className="text-kynp-yellow">Follow up.</span>
+      <h1 className="text-3xl font-semibold tracking-tight leading-[1.05]">
+        Kyn&rsquo;P <span className="text-kynp-yellow">Leads</span>
       </h1>
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-8 w-full sm:w-auto">
-        <button
-          onClick={onPrimary}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-kynp-yellow text-kynp-black px-6 py-3 text-sm font-semibold hover:brightness-110"
-        >
-          <Lock className="size-4" /> Sign up free
-        </button>
-        <button
-          onClick={onPrimary}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg border border-foreground/15 px-6 py-3 text-sm font-semibold hover:bg-foreground/5"
-        >
-          Sign in
-        </button>
+      <p className="text-muted-foreground text-sm mt-2 mb-8">
+        Welcome back, BOSS. Sign in with your phone number.
+      </p>
+      <button
+        onClick={onPhoneLogin}
+        className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-kynp-yellow text-kynp-black px-6 py-3 text-sm font-semibold hover:brightness-110"
+      >
+        <Lock className="size-4" /> Sign In
+      </button>
+      <div className="mt-8 flex items-center gap-4 text-xs text-muted-foreground">
+        <Link href="/terms" className="hover:text-foreground">Terms</Link>
+        <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
       </div>
     </section>
-  )
-}
-
-function LandingFooter() {
-  return (
-    <footer className="mt-auto border-t border-foreground/10 bg-background/85">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
-        <p>&copy; {new Date().getFullYear()} Kyn&rsquo;P Leads. All rights reserved.</p>
-        <div className="flex items-center gap-4">
-          <Link href="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
-          <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
-        </div>
-      </div>
-    </footer>
   )
 }
 
