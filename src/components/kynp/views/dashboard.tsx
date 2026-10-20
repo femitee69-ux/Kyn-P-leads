@@ -89,19 +89,8 @@ export function DashboardView() {
   const ready = (data?.apiKeys.count ?? 0) > 0
 
   return (
-    <section className="space-y-8">
-      {/* Hero headline */}
-      <div className="space-y-3">
-        <p className="kynp-eyebrow text-kynp-yellow">Dashboard</p>
-        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight leading-[1.1]">
-          Cold outreach, <span className="text-kynp-yellow">on the clock.</span>
-        </h1>
-        <p className="text-muted-foreground text-sm sm:text-base max-w-2xl">
-          Kyn&rsquo;P discovers qualified prospects in your target country, composes a personalized
-          message for each, and dispatches them on a 30-second cadence across your linked Gmail
-          accounts &mdash; with optional 24-hour follow-ups.
-        </p>
-      </div>
+    <section className="space-y-6">
+      <h1 className="text-2xl font-semibold">Dashboard</h1>
 
       {/* Readiness gates */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

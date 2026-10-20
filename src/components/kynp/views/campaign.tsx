@@ -132,17 +132,8 @@ export function CampaignView() {
   }
 
   return (
-    <section className="space-y-6 sm:space-y-8">
-      <div className="space-y-2">
-        <p className="kynp-eyebrow text-kynp-yellow">New Campaign</p>
-        <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight leading-[1.1]">
-          Tell Kyn&rsquo;P who to <span className="text-kynp-yellow">reach.</span>
-        </h1>
-        <p className="text-muted-foreground text-xs sm:text-base max-w-2xl">
-          Specify the country, brand/industry, and the service you&rsquo;d like to preach. Kyn&rsquo;P
-          finds leads and composes tailored messages &mdash; then dispatches one every 30 seconds.
-        </p>
-      </div>
+    <section className="space-y-6">
+      <h1 className="text-2xl font-semibold">New Campaign</h1>
 
       {/* Readiness / blocking banners */}
       {blocked && (

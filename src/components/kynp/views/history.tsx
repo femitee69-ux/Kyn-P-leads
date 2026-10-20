@@ -43,17 +43,8 @@ export function HistoryView() {
   }
 
   return (
-    <section className="space-y-8">
-      <div className="space-y-3">
-        <p className="kynp-eyebrow text-kynp-yellow">Campaign History</p>
-        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight leading-[1.1]">
-          Past runs, <span className="text-kynp-yellow">kept honest.</span>
-        </h1>
-        <p className="text-muted-foreground text-sm sm:text-base max-w-2xl">
-          Every campaign Kyn&rsquo;P has run for this workspace is logged here &mdash;
-          from setup to completion. <strong>Tap any campaign to open its lead queue &amp; view all sent messages.</strong>
-        </p>
-      </div>
+    <section className="space-y-6">
+      <h1 className="text-2xl font-semibold">Campaign History</h1>
 
       {isLoading ? (
         <div className="rounded-2xl border border-foreground/10 p-12 text-center text-sm text-muted-foreground">

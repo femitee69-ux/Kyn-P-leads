@@ -29,20 +29,7 @@ export function GmailsView() {
 
   return (
     <section className="space-y-6">
-      <div className="space-y-2">
-        <p className="kynp-eyebrow text-kynp-yellow">Gmail Accounts</p>
-        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight leading-[1.1]">
-          Link your Gmails, BOSS.
-        </h1>
-        <p className="text-muted-foreground text-xs sm:text-sm max-w-2xl">
-          Enter your Gmail address + App Password (16 chars from{' '}
-          <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" className="text-kynp-yellow underline">
-            myaccount.google.com/apppasswords
-          </a>
-          ). The app verifies the password before saving — wrong passwords are rejected.
-          Not all 5 slots need to be filled. Remove any Gmail anytime.
-        </p>
-      </div>
+      <h1 className="text-2xl font-semibold">Gmail Accounts</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {[1, 2, 3, 4, 5].map((slot) => (

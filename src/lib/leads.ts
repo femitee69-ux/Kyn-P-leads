@@ -23,32 +23,34 @@ export async function generateLeadsForCampaign(
   input: CampaignInput,
   userId: string,
 ): Promise<{ leads: GeneratedLead[] }> {
-  // Step 1: Search Google via Serper
-  const serperKey = await db.apiKey.findFirst({
-    where: { userId, slot: 1, service: 'serper', active: true },
+  // Step 1: Search Google via Serper — try all 3 slots, auto-switch when one runs out
+  const serperKeys = await db.apiKey.findMany({
+    where: { userId, service: 'serper', active: true },
+    orderBy: { slot: 'asc' },
   })
 
   let companies: { name: string; url: string; snippet: string; email: string | null; companyName: string | null }[] = []
-  if (serperKey) {
+  // Try each Serper key until one works (auto-switch when credits run out)
+  for (const serperKey of serperKeys) {
     try {
       const serperResults = await searchSerper(serperKey.value, input)
+      if (serperResults.length === 0) {
+        console.warn(`[leads] Serper key slot ${serperKey.slot} returned 0 results, trying next...`)
+        continue
+      }
       // Step 2: Scrape each website for real company name + email
       companies = await Promise.all(
         serperResults.slice(0, 20).map(async (c) => {
           const scraped = await scrapeWebsite(c.url).catch(() => ({ companyName: null, email: null }))
-          return {
-            ...c,
-            email: scraped.email,
-            companyName: scraped.companyName,
-          }
+          return { ...c, email: scraped.email, companyName: scraped.companyName }
         })
       )
-      // Filter: only keep results that have a real company name (not article titles)
       companies = companies.filter(c => c.companyName)
-      console.log(`[leads] Found ${companies.length} real companies (filtered from ${serperResults.length} search results)`)
+      console.log(`[leads] Slot ${serperKey.slot}: found ${companies.length} companies`)
+      break // Success — stop trying other keys
     } catch (e) {
-      console.warn('[leads] Serper failed:', e)
-      companies = []
+      console.warn(`[leads] Serper key slot ${serperKey.slot} failed:`, e instanceof Error ? e.message : String(e))
+      // Continue to next key
     }
   }
 
@@ -92,27 +94,36 @@ export async function generateMoreLeads(
   existingLeadCount: number,
   batchSize: number = 10,
 ): Promise<GeneratedLead[]> {
-  const serperKey = await db.apiKey.findFirst({
-    where: { userId, slot: 1, service: 'serper', active: true },
+  const serperKeys = await db.apiKey.findMany({
+    where: { userId, service: 'serper', active: true },
+    orderBy: { slot: 'asc' },
   })
-  if (!serperKey) return []
+  if (serperKeys.length === 0) return []
 
   const page = Math.floor(existingLeadCount / 20) + 1
-  const serperResults = await searchSerperForBatch(serperKey.value, input, page)
-  if (serperResults.length === 0) return []
 
-  const companies = await Promise.all(
-    serperResults.slice(0, batchSize).map(async (c) => {
-      const scraped = await scrapeWebsite(c.url).catch(() => ({ companyName: null, email: null }))
-      return { ...c, email: scraped.email, companyName: scraped.companyName }
-    })
-  )
+  // Try each key until one works
+  for (const serperKey of serperKeys) {
+    try {
+      const serperResults = await searchSerperForBatch(serperKey.value, input, page)
+      if (serperResults.length === 0) continue
 
-  const filtered = companies.filter(c => c.companyName)
-  console.log(`[leads] Batch page ${page}: ${filtered.length} real companies from ${companies.length} results`)
+      const companies = await Promise.all(
+        serperResults.slice(0, batchSize).map(async (c) => {
+          const scraped = await scrapeWebsite(c.url).catch(() => ({ companyName: null, email: null }))
+          return { ...c, email: scraped.email, companyName: scraped.companyName }
+        })
+      )
 
-  if (filtered.length === 0) return []
-  return generateTemplateLeads(input, filtered)
+      const filtered = companies.filter(c => c.companyName)
+      console.log(`[leads] Batch page ${page}, slot ${serperKey.slot}: ${filtered.length} companies`)
+      if (filtered.length === 0) continue
+      return generateTemplateLeads(input, filtered)
+    } catch (e) {
+      console.warn(`[leads] Batch slot ${serperKey.slot} failed, trying next...`)
+    }
+  }
+  return []
 }
 
 // ============ SERPER SEARCH ============

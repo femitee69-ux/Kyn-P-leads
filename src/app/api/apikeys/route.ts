@@ -10,9 +10,23 @@ export const API_KEY_SLOTS: { slot: number; service: string; label: string; plac
   {
     slot: 1,
     service: 'serper',
-    label: 'Serper.dev API Key',
-    placeholder: 'serper.dev key (32-char hex string)',
-    description: 'Searches Google to find real company websites in your target country. Free: 2,500 credits at serper.dev. Without this, the app can\'t find real leads.',
+    label: 'Serper.dev Key 1',
+    placeholder: 'serper.dev API key',
+    description: 'Primary key. Get free 2,500 credits at serper.dev.',
+  },
+  {
+    slot: 2,
+    service: 'serper',
+    label: 'Serper.dev Key 2',
+    placeholder: 'serper.dev API key',
+    description: 'Backup. Auto-switches here when Key 1 runs out.',
+  },
+  {
+    slot: 3,
+    service: 'serper',
+    label: 'Serper.dev Key 3',
+    placeholder: 'serper.dev API key',
+    description: 'Backup. Auto-switches here when Key 2 runs out.',
   },
 ]
 

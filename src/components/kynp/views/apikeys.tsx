@@ -67,16 +67,8 @@ export function ApiKeysView() {
 
   return (
     <section className="space-y-6">
-      <div className="space-y-2">
-        <p className="kynp-eyebrow text-kynp-yellow">API Keys</p>
-        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight leading-[1.1]">
-          Serper.dev API Key
-        </h1>
-        <p className="text-muted-foreground text-xs sm:text-sm max-w-2xl">
-          This is the only API key the app needs. Serper.dev searches Google to find real company
-          websites in your target country. Free: 2,500 credits at{' '}
-          <a href="https://serper.dev" target="_blank" rel="noopener" className="text-kynp-yellow underline">serper.dev</a>.
-        </p>
+      <div>
+        <h1 className="text-2xl font-semibold">Serper.dev Keys</h1>
       </div>
 
       {anyExhausted && (
@@ -92,7 +84,7 @@ export function ApiKeysView() {
         </div>
       )}
 
-      <div className="max-w-md mx-auto">
+      <div className="space-y-4">
         {(data?.slots ?? defaultSlots).map((slot) => {
           const c = credits?.credits.find((x) => x.slot === slot.slot)
           return (
@@ -109,23 +101,14 @@ export function ApiKeysView() {
           )
         })}
       </div>
-
-      <div className="rounded-xl border border-foreground/10 p-4 flex items-start gap-3 bg-foreground/[0.02]">
-        <ShieldCheck className="size-4 text-kynp-yellow shrink-0 mt-0.5" />
-        <div className="text-xs text-muted-foreground space-y-1">
-          <p className="text-foreground font-medium text-sm">Key safety &amp; multi-tenancy</p>
-          <p>
-            Keys are stored in the local Kyn&rsquo;P database scoped to your account &mdash; other
-            users never see them. Masked values are shown for your safety.
-          </p>
-        </div>
-      </div>
     </section>
   )
 }
 
 const defaultSlots = [
-  { slot: 1, service: 'serper', label: 'Serper.dev API Key', placeholder: 'serper.dev key', description: 'Searches Google for real company websites. Free: 2,500 credits at serper.dev.' },
+  { slot: 1, service: 'serper', label: 'Serper.dev Key 1', placeholder: 'serper.dev API key', description: 'Primary key.' },
+  { slot: 2, service: 'serper', label: 'Serper.dev Key 2', placeholder: 'serper.dev API key', description: 'Backup.' },
+  { slot: 3, service: 'serper', label: 'Serper.dev Key 3', placeholder: 'serper.dev API key', description: 'Backup.' },
 ]
 
 interface CreditInfo {
