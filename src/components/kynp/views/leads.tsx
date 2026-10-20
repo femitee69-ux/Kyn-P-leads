@@ -69,6 +69,7 @@ const STATUS_META = {
 export function LeadsView() {
   const { campaignId, setStats, setRecent, pushLog, isDispatching, setDispatching } = useKynpStore()
   const qc = useQueryClient()
+  const [isSendingAll, setIsSendingAll] = React.useState(false)
   const { data, isLoading, refetch } = useQuery<LeadsResp>({
     queryKey: ['leads', campaignId],
     queryFn: () => fetchLeads(campaignId ?? undefined),
@@ -128,6 +129,30 @@ export function LeadsView() {
     }
   }
 
+  const handleSendAll = async () => {
+    if (!campaignId) return
+    setIsSendingAll(true)
+    pushLog('Batch sending all pending leads...')
+    try {
+      const res = await fetch('/api/leads/send-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'batch send failed')
+      toast.success(`Sent ${json.sent} emails${json.failed ? `, ${json.failed} failed` : ''}.`)
+      pushLog(`Batch complete: ${json.sent} sent, ${json.failed} failed.`)
+      qc.invalidateQueries({ queryKey: ['leads', campaignId] })
+      qc.invalidateQueries({ queryKey: ['status'] })
+    } catch (e: any) {
+      toast.error(e.message)
+      pushLog(`Batch error: ${e.message}`)
+    } finally {
+      setIsSendingAll(false)
+    }
+  }
+
   if (!campaignId) {
     return (
       <section className="space-y-4">
@@ -152,14 +177,24 @@ export function LeadsView() {
             ) : 'Live queue'}
           </h1>
         </div>
-        <button
-          onClick={handleManualDispatch}
-          disabled={isDispatching}
-          className="inline-flex items-center gap-2 rounded-lg bg-foreground/10 hover:bg-foreground/15 px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50"
-        >
-          {isDispatching ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-          Dispatch now
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleManualDispatch}
+            disabled={isDispatching}
+            className="inline-flex items-center gap-2 rounded-lg bg-foreground/10 hover:bg-foreground/15 px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50"
+          >
+            {isDispatching ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+            Send 1
+          </button>
+          <button
+            onClick={handleSendAll}
+            disabled={isSendingAll}
+            className="inline-flex items-center gap-2 rounded-lg bg-kynp-yellow text-kynp-black hover:brightness-110 px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50"
+          >
+            {isSendingAll ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+            Send All ({data?.stats.pending ?? 0})
+          </button>
+        </div>
       </div>
 
       {data?.stats && (
