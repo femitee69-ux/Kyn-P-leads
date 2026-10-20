@@ -11,7 +11,9 @@ interface StartBody {
   country?: string
   brand?: string
   service?: string
+  targetAudience?: string
   followUp?: boolean
+  gmailSlots?: number[]
 }
 
 /**
@@ -27,11 +29,20 @@ export async function POST(req: Request) {
     const country = (body.country || '').trim()
     const brand = (body.brand || '').trim()
     const service = (body.service || '').trim()
+    const targetAudience = (body.targetAudience || '').trim()
     const followUp = Boolean(body.followUp)
 
     if (!country || !brand || !service) {
       return NextResponse.json(
         { error: 'country, brand and service are required' },
+        { status: 400 },
+      )
+    }
+
+    // Gmail selection is compulsory — at least 1 must be selected
+    if (!body.gmailSlots || body.gmailSlots.length === 0) {
+      return NextResponse.json(
+        { error: 'Select at least 1 Gmail to send from.' },
         { status: 400 },
       )
     }
@@ -55,6 +66,7 @@ export async function POST(req: Request) {
         country,
         brand,
         service,
+        targetAudience: targetAudience || null,
         followUp,
         status: 'running',
         startedAt: new Date(),

@@ -184,15 +184,7 @@ export function LeadsView() {
             className="inline-flex items-center gap-2 rounded-lg bg-foreground/10 hover:bg-foreground/15 px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50"
           >
             {isDispatching ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-            Send 1
-          </button>
-          <button
-            onClick={handleSendAll}
-            disabled={isSendingAll}
-            className="inline-flex items-center gap-2 rounded-lg bg-kynp-yellow text-kynp-black hover:brightness-110 px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50"
-          >
-            {isSendingAll ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
-            Send All ({data?.stats.pending ?? 0})
+            Dispatch now
           </button>
         </div>
       </div>

@@ -74,19 +74,20 @@ model GmailAccount {
 
 /// A lead-generation campaign scoped to a user
 model Campaign {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  country     String
-  brand       String
-  service     String
-  followUp    Boolean  @default(false)
-  status      String   @default("idle") // idle | running | paused | completed
-  startedAt   DateTime?
-  completedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  leads       Lead[]
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  country         String
+  brand           String
+  service         String
+  targetAudience  String?
+  followUp        Boolean  @default(false)
+  status          String   @default("idle") // idle | running | paused | completed
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  leads           Lead[]
 
   @@index([userId])
 }

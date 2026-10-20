@@ -36,6 +36,8 @@ export async function GET() {
 /**
  * POST /api/gmails
  * body: { slot: 1..5, email, appPassword }
+ * Verifies the App Password via SMTP before saving — if the password is wrong,
+ * returns an error and does NOT save.
  */
 export async function POST(req: Request) {
   try {
@@ -49,12 +51,30 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'slot must be 1..5' }, { status: 400 })
     }
     if (!body.email || !body.email.includes('@')) {
-      return NextResponse.json({ error: 'valid email required' }, { status: 400 })
+      return NextResponse.json({ error: 'Enter a valid Gmail address.' }, { status: 400 })
     }
-    // appPassword is now optional (OAuth path doesn't use it).
-    const appPassword = body.appPassword ? body.appPassword.trim() : null
-    if (appPassword !== null && appPassword.length < 8) {
-      return NextResponse.json({ error: 'app password too short' }, { status: 400 })
+    const email = body.email.trim()
+    const appPassword = body.appPassword ? body.appPassword.trim().replace(/\s/g, '') : null
+    if (!appPassword || appPassword.length < 8) {
+      return NextResponse.json({ error: 'App password too short — must be 16 characters.' }, { status: 400 })
+    }
+
+    // CRITICAL: Verify the App Password works via SMTP BEFORE saving.
+    // If the password is wrong, Gmail rejects the SMTP connection.
+    try {
+      const nodemailer = (await import('nodemailer')).default
+      const transporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        auth: { user: email, pass: appPassword },
+      })
+      await transporter.verify()
+      // SMTP verification passed — the App Password is valid
+    } catch (e: any) {
+      return NextResponse.json({
+        error: 'Gmail rejected this App Password. Make sure you generated it at myaccount.google.com/apppasswords and copied all 16 characters.',
+      }, { status: 400 })
     }
 
     const existing = await db.gmailAccount.findUnique({
@@ -64,17 +84,11 @@ export async function POST(req: Request) {
     if (existing) {
       saved = await db.gmailAccount.update({
         where: { userId_slot: { userId, slot: body.slot } },
-        data: { email: body.email.trim(), appPassword, active: true },
+        data: { email, appPassword, active: true },
       })
     } else {
       saved = await db.gmailAccount.create({
-        data: {
-          userId,
-          slot: body.slot,
-          email: body.email.trim(),
-          appPassword,
-          active: true,
-        },
+        data: { userId, slot: body.slot, email, appPassword, active: true },
       })
     }
 

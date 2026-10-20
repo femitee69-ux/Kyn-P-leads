@@ -50,6 +50,7 @@ export function AppShell() {
         country: '',
         brand: '',
         service: '',
+        targetAudience: '',
         followUp: false,
         selectedGmailSlots: [],
         log: [],

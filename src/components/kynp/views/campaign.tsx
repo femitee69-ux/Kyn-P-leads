@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   AlertCircle,
   Check,
+  Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -51,7 +52,7 @@ function validateService(v: string): string | null {
 
 export function CampaignView() {
   const {
-    country, brand, service, followUp, selectedGmailSlots,
+    country, brand, service, targetAudience, followUp, selectedGmailSlots,
     setForm, isStarting, setStarting,
     setCampaign, setView, pushLog,
   } = useKynpStore()
@@ -112,7 +113,7 @@ export function CampaignView() {
       const res = await fetch('/api/campaigns/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ country, brand, service, followUp }),
+        body: JSON.stringify({ country, brand, service, targetAudience, followUp, gmailSlots: selectedGmailSlots }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Start failed')
@@ -226,6 +227,15 @@ export function CampaignView() {
           placeholder="e.g. paid-ads management that adds 20% revenue in 60 days"
           textarea
           error={serviceErr}
+        />
+
+        <Field
+          icon={<Users className="size-4 text-kynp-yellow" />}
+          label="Target audience"
+          hint="Who are you trying to reach? e.g. founders, marketing directors, small business owners."
+          value={targetAudience}
+          onChange={(v) => setForm({ targetAudience: v })}
+          placeholder="e.g. founders and marketing directors of skincare brands"
         />
 
         {/* Gmail selection — compulsory */}
