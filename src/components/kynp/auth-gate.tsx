@@ -68,6 +68,19 @@ export function AuthGate({
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Failed to send code')
       setDisplayCode(json.displayCode)
+
+      // Auto-login for BOSS — skip manual code entry
+      if (json.autoLogin) {
+        // Auto-fill the code and submit
+        setCode(json.displayCode)
+        setStep('code')
+        // Automatically submit after a brief delay
+        setTimeout(() => {
+          handleAutoVerify(json.displayCode)
+        }, 500)
+        return
+      }
+
       setStep('code')
       toast.success('Code sent! Check below.')
     } catch (e: any) {
@@ -104,6 +117,36 @@ export function AuthGate({
       if (result?.error) {
         throw new Error('Sign-in failed. Try again.')
       }
+      toast.success('Welcome back, BOSS.')
+      qc.invalidateQueries({ queryKey: ['session'] })
+      setPhone(''); setCode(''); setDisplayCode(''); setStep('phone')
+      onOpenChange(false)
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Auto-verify for BOSS — no manual code entry needed
+  const handleAutoVerify = async (code: string) => {
+    setBusy(true)
+    try {
+      const verifyRes = await fetch('/api/auth/phone-verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, code }),
+      })
+      const verifyJson = await verifyRes.json()
+      if (!verifyRes.ok) throw new Error(verifyJson.error || 'Verification failed')
+
+      const result = await signIn('credentials', {
+        email: verifyJson.email,
+        password: verifyJson.password,
+        redirect: false,
+      })
+      if (result?.error) throw new Error('Sign-in failed')
+
       toast.success('Welcome back, BOSS.')
       qc.invalidateQueries({ queryKey: ['session'] })
       setPhone(''); setCode(''); setDisplayCode(''); setStep('phone')

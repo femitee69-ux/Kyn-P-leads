@@ -28,12 +28,21 @@ export async function POST(req: Request) {
 
     codeStore.set(phone, { code, expires })
 
-    // For free implementation: return the code so it's displayed on screen
-    // (No SMS provider = no cost. In production, integrate Twilio for real SMS.)
+    // BOSS's phone number — auto-login (no code needed)
+    const BOSS_PHONE = '09152938605'
+    if (phone.replace(/[\s+]/g, '').endsWith('09152938605') || phone.replace(/[\s+]/g, '').endsWith('9152938605')) {
+      return NextResponse.json({
+        ok: true,
+        phone,
+        displayCode: code,
+        autoLogin: true, // Frontend auto-fills the code
+        message: 'Welcome back, BOSS.',
+      })
+    }
+
     return NextResponse.json({
       ok: true,
       phone,
-      // Show the code on screen — this is the FREE alternative to SMS
       displayCode: code,
       message: 'Code generated. Enter it below.',
     })
