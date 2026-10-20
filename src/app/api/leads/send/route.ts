@@ -141,6 +141,7 @@ export async function POST(req: Request) {
     })
     let slot: number | null = null
     let sendError: string | undefined
+    let emailActuallySent = false
     if (gmails.length > 0) {
       const alreadySent = await db.lead.count({
         where: { campaignId, NOT: { status: 'pending' } },
@@ -156,6 +157,7 @@ export async function POST(req: Request) {
           body: next.message,
           fromName: 'Kyn\'P Leads',
         })
+        emailActuallySent = true
       } catch (e: any) {
         sendError = e.message
         console.warn('[leads/send] gmail send failed:', sendError)
@@ -163,9 +165,15 @@ export async function POST(req: Request) {
     }
 
     const now = new Date()
+    // Only mark as "sent" if the email was actually sent successfully.
+    // If SMTP/OAuth failed, mark as "failed" so the user knows.
     const updated = await db.lead.update({
       where: { id: next.id },
-      data: { status: 'sent', sentAt: now, gmailSlot: slot },
+      data: { 
+        status: emailActuallySent ? 'sent' : 'failed', 
+        sentAt: emailActuallySent ? now : null, 
+        gmailSlot: slot,
+      },
     })
 
     // AFTER dispatching: check if we need to generate more leads.
