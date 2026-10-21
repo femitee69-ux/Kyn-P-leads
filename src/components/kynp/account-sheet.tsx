@@ -59,7 +59,6 @@ export function AccountSheet() {
                 Kyn&rsquo;P Leads
               </SheetTitle>
               <SheetDescription className="text-xs text-muted-foreground">
-                Find &middot; Compose &middot; Send &middot; Follow up
               </SheetDescription>
             </div>
           </div>

@@ -197,23 +197,15 @@ export function AppShell() {
 
 function PhoneLoginView({ onPhoneLogin }: { onPhoneLogin: () => void }) {
   return (
-    <section className="flex flex-col items-center justify-center text-center py-8 sm:py-12 max-w-md mx-auto">
-      <div className="size-20 rounded-full overflow-hidden flex items-center justify-center mb-6">
-        <img src="/logo.png" alt="Kyn'P Leads" className="size-20 object-cover" />
-      </div>
-      <h1 className="text-3xl font-semibold tracking-tight leading-[1.05]">
-        Kyn&rsquo;P <span className="text-kynp-yellow">Leads</span>
-      </h1>
-      <p className="text-muted-foreground text-sm mt-2 mb-8">
-        Welcome back, BOSS. Sign in with your phone number.
-      </p>
+    <section className="flex flex-col items-center justify-center min-h-[60vh] max-w-sm mx-auto">
+      <img src="/logo.png" alt="Kyn'P" className="size-16 rounded-full mb-6" />
       <button
         onClick={onPhoneLogin}
-        className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-kynp-yellow text-kynp-black px-6 py-3 text-sm font-semibold hover:brightness-110"
+        className="w-full rounded-md bg-kynp-black text-white px-6 py-3 text-sm font-medium hover:bg-kynp-ink"
       >
-        <Lock className="size-4" /> Sign In
+        Sign In
       </button>
-      <div className="mt-8 flex items-center gap-4 text-xs text-muted-foreground">
+      <div className="mt-6 flex gap-6 text-xs text-muted-foreground">
         <Link href="/terms" className="hover:text-foreground">Terms</Link>
         <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
       </div>

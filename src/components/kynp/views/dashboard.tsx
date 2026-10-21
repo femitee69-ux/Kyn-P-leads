@@ -132,7 +132,7 @@ export function DashboardView() {
       <div className="rounded-2xl border border-foreground/10 bg-foreground/[0.02] overflow-hidden">
         <div className="px-6 py-5 flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between border-b border-foreground/10">
           <div className="space-y-1">
-            <p className="kynp-eyebrow text-muted-foreground">Current Campaign</p>
+            
             {data?.campaign ? (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                 <span className="inline-flex items-center gap-1.5 font-medium">
@@ -248,7 +248,7 @@ function DispatchTicker() {
   return (
     <div className="rounded-xl border border-foreground/10 bg-foreground/[0.02] p-5">
       <div className="flex items-center justify-between mb-3">
-        <p className="kynp-eyebrow text-muted-foreground">Latest Dispatch</p>
+        
         <span className="text-[10px] text-muted-foreground uppercase inline-flex items-center gap-1">
           <Clock className="size-3" /> 30s cadence · 24h follow-up
         </span>

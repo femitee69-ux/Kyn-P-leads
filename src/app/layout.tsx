@@ -20,7 +20,7 @@ const siteUrl = "https://kynpleads.app";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Kyn'P Leads — Find. Compose. Send. Follow up.",
+    default: "Kyn'P Leads",
     template: "%s · Kyn'P Leads",
   },
   description:
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: siteUrl,
     siteName: "Kyn'P Leads",
-    title: "Kyn'P Leads — Find. Compose. Send. Follow up.",
+    title: "Kyn'P Leads",
     description:
       "Multi-tenant lead-generation & automated Gmail outreach. Sign up free, plug in your Serper.dev key + 5 Gmail accounts, and let Kyn'P run your cadence.",
     images: [{ url: "/logo.png", width: 512, height: 512, alt: "Kyn'P Leads logo" }],

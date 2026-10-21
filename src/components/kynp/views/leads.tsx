@@ -156,7 +156,7 @@ export function LeadsView() {
   if (!campaignId) {
     return (
       <section className="space-y-4">
-        <p className="kynp-eyebrow text-kynp-yellow">Leads &amp; Messages</p>
+        
         <h1 className="text-2xl font-semibold">No campaign running.</h1>
         <p className="text-sm text-muted-foreground">Start a campaign to populate the live queue.</p>
       </section>
@@ -167,7 +167,7 @@ export function LeadsView() {
     <section className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div className="space-y-1">
-          <p className="kynp-eyebrow text-kynp-yellow">Leads &amp; Messages</p>
+          
           <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
             {data?.campaign ? (
               <>
