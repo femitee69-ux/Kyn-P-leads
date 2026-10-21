@@ -106,7 +106,7 @@ export function DashboardView() {
           ok={(data?.apiKeys.count ?? 0) > 0}
           count={`${data?.apiKeys.count ?? 0}/3`}
           label="API keys"
-          sub="Serper · LLM · SMTP"
+          sub="Serper.dev"
           icon={<Tag className="size-3.5" />}
           onClick={() => setView('apikeys')}
         />

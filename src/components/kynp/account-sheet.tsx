@@ -26,8 +26,8 @@ const NAV: { key: ViewKey; label: string; hint: string; icon: React.ComponentTyp
   { key: 'dashboard', label: 'Dashboard', hint: 'Status · Start / Stop', icon: LayoutGrid },
   { key: 'campaign', label: 'New Campaign', hint: 'Country · Brand · Service', icon: Megaphone },
   { key: 'leads', label: 'Leads & Messages', hint: 'Live queue', icon: ListChecks },
-  { key: 'apikeys', label: 'API Keys', hint: 'Serper · LLM · SMTP', icon: KeyRound },
-  { key: 'gmails', label: 'Gmail Accounts', hint: '5 sender slots (optional)', icon: Mail },
+  { key: 'apikeys', label: 'API Keys', hint: 'Serper.dev', icon: KeyRound },
+  { key: 'gmails', label: 'Gmail Accounts', hint: '5 slots · auto-rotate', icon: Mail },
   { key: 'history', label: 'Campaign History', hint: 'Past runs', icon: History },
 ]
 
