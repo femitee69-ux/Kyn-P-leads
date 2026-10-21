@@ -6,15 +6,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   Loader2,
+  Upload,
+  Mail,
   Send,
-  CornerUpRight,
-  Clock,
   RefreshCw,
   ChevronDown,
   ChevronUp,
-  Mail,
-  Globe2,
-  Building2,
+  FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -33,29 +31,16 @@ interface LeadRow {
   createdAt: string
 }
 interface LeadsResp {
-  campaign: {
-    id: string
-    status: string
-    country: string
-    brand: string
-    service: string
-    followUp: boolean
-  } | null
+  campaign: { id: string; status: string; country: string; brand: string; service: string; followUp: boolean } | null
   leads: LeadRow[]
-  stats: {
-    total: number
-    pending: number
-    sent: number
-    followedUp: number
-    failed: number
-  }
+  stats: { total: number; pending: number; sent: number; followedUp: number; failed: number }
 }
 
 async function fetchLeads(campaignId?: string): Promise<LeadsResp> {
   const url = new URL('/api/leads/list', window.location.origin)
   if (campaignId) url.searchParams.set('campaignId', campaignId)
   const res = await fetch(url.toString(), { cache: 'no-store' })
-  if (!res.ok) throw new Error('leads fetch failed')
+  if (!res.ok) throw new Error('fetch failed')
   return res.json()
 }
 
@@ -69,12 +54,27 @@ const STATUS_META = {
 export function LeadsView() {
   const { campaignId, setStats, setRecent, pushLog, isDispatching, setDispatching } = useKynpStore()
   const qc = useQueryClient()
-  const [isSendingAll, setIsSendingAll] = React.useState(false)
-  const { data, isLoading, refetch } = useQuery<LeadsResp>({
+  const { data, isLoading } = useQuery<LeadsResp>({
     queryKey: ['leads', campaignId],
     queryFn: () => fetchLeads(campaignId ?? undefined),
     refetchInterval: 3000,
     enabled: !!campaignId,
+  })
+
+  // Upload state
+  const [uploading, setUploading] = React.useState(false)
+  const [fileData, setFileData] = React.useState<Array<{ name: string; email: string; company: string; message: string }>>([])
+  const [gmailSlots, setGmailSlots] = React.useState<number[]>([])
+  const [showUpload, setShowUpload] = React.useState(false)
+
+  // Fetch Gmails
+  const { data: gmailsData } = useQuery({
+    queryKey: ['gmails'],
+    queryFn: async () => {
+      const res = await fetch('/api/gmails', { cache: 'no-store' })
+      if (!res.ok) throw new Error('failed')
+      return res.json()
+    },
   })
 
   React.useEffect(() => {
@@ -92,7 +92,7 @@ export function LeadsView() {
   const handleManualDispatch = async () => {
     if (!campaignId) return
     setDispatching(true)
-    pushLog('Manual dispatch triggered.')
+    pushLog('Dispatching 1 lead...')
     try {
       const res = await fetch('/api/leads/send', {
         method: 'POST',
@@ -102,124 +102,222 @@ export function LeadsView() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'dispatch failed')
       if (json.sent) {
-        const sent = json.sent
-        setRecent({
-          id: sent.id,
-          name: sent.name,
-          email: sent.email,
-          company: sent.company,
-          position: sent.position,
-          status: sent.status,
-          kind: sent.kind ?? 'initial',
-          gmailSlot: sent.gmailSlot,
-          message: sent.message,
-          sentAt: sent.sentAt,
-        })
-        pushLog(`Dispatched to ${sent.name} <${sent.email}> · Gmail slot ${sent.gmailSlot ?? '—'}`)
-      } else {
-        pushLog('No more leads to dispatch.')
+        pushLog(`Sent to ${json.sent.name} <${json.sent.email}> · Gmail slot ${json.sent.gmailSlot ?? '—'}`)
       }
       qc.invalidateQueries({ queryKey: ['leads', campaignId] })
       qc.invalidateQueries({ queryKey: ['status'] })
     } catch (e: any) {
       toast.error(e.message)
-      pushLog(`Error: ${e.message}`)
     } finally {
       setDispatching(false)
     }
   }
 
-  const handleSendAll = async () => {
-    if (!campaignId) return
-    setIsSendingAll(true)
-    pushLog('Batch sending all pending leads...')
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const text = await file.text()
+    const lines = text.split('\n').filter(l => l.trim())
+
+    // Parse CSV — detect header
+    const leads: Array<{ name: string; email: string; company: string; message: string }> = []
+    let nameIdx = 0, emailIdx = 1, companyIdx = 2, messageIdx = 3
+    let hasHeader = false
+
+    const firstLine = lines[0].toLowerCase()
+    if (firstLine.includes('email') || firstLine.includes('name') || firstLine.includes('company')) {
+      hasHeader = true
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
+      nameIdx = headers.findIndex(h => h.includes('name'))
+      emailIdx = headers.findIndex(h => h.includes('email'))
+      companyIdx = headers.findIndex(h => h.includes('company'))
+      messageIdx = headers.findIndex(h => h.includes('message') || h.includes('body'))
+    }
+
+    // Ensure default indices
+    if (nameIdx === -1) nameIdx = 0
+    if (emailIdx === -1) emailIdx = 1
+    if (companyIdx === -1) companyIdx = 2
+    if (messageIdx === -1) messageIdx = 3
+
+    const startLine = hasHeader ? 1 : 0
+    for (let i = startLine; i < lines.length; i++) {
+      const cols = parseCSVLine(lines[i])
+      if (cols.length < 2) continue
+      leads.push({
+        name: (cols[nameIdx] || '').trim(),
+        email: (cols[emailIdx] || '').trim(),
+        company: (cols[companyIdx] || '').trim(),
+        message: (cols[messageIdx] || '').trim(),
+      })
+    }
+
+    setFileData(leads)
+    toast.success(`Parsed ${leads.length} leads from file. ${leads.filter(l => l.email).length} have emails.`)
+  }
+
+  const handleUploadAndSend = async () => {
+    if (!campaignId) {
+      toast.error('Start a campaign first, then upload leads.')
+      return
+    }
+    if (fileData.length === 0) {
+      toast.error('No leads to upload.')
+      return
+    }
+    if (gmailSlots.length === 0) {
+      toast.error('Select at least 1 Gmail to send from.')
+      return
+    }
+
+    setUploading(true)
+    pushLog(`Uploading ${fileData.length} leads and sending via ${gmailSlots.length} Gmail(s)...`)
+
     try {
-      const res = await fetch('/api/leads/send-all', {
+      const res = await fetch('/api/leads/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId }),
+        body: JSON.stringify({ campaignId, leads: fileData, gmailSlots }),
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'batch send failed')
-      toast.success(`Sent ${json.sent} emails${json.failed ? `, ${json.failed} failed` : ''}.`)
-      pushLog(`Batch complete: ${json.sent} sent, ${json.failed} failed.`)
+      if (!res.ok) throw new Error(json.error || 'upload failed')
+
+      toast.success(`Sent ${json.dispatched} emails, ${json.failed} failed. Check your Gmail Sent folder.`)
+      pushLog(`Upload complete: ${json.saved} saved, ${json.dispatched} sent, ${json.failed} failed.`)
+      setFileData([])
+      setShowUpload(false)
       qc.invalidateQueries({ queryKey: ['leads', campaignId] })
       qc.invalidateQueries({ queryKey: ['status'] })
     } catch (e: any) {
       toast.error(e.message)
-      pushLog(`Batch error: ${e.message}`)
     } finally {
-      setIsSendingAll(false)
+      setUploading(false)
     }
   }
 
   if (!campaignId) {
     return (
       <section className="space-y-4">
-        
-        <h1 className="text-2xl font-semibold">No campaign running.</h1>
-        <p className="text-sm text-muted-foreground">Start a campaign to populate the live queue.</p>
+        <h1 className="text-2xl font-semibold">Leads</h1>
+        <p className="text-sm text-muted-foreground">Start a campaign first.</p>
       </section>
     )
   }
 
+  const activeGmails = (gmailsData?.gmails ?? []).filter((g: any) => g.active)
+
   return (
     <section className="space-y-6">
       <div className="flex items-center justify-between gap-3">
-        <div className="space-y-1">
-          
-          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
-            {data?.campaign ? (
-              <>
-                {data.campaign.country} &middot;{' '}
-                <span className="text-kynp-yellow">{data.campaign.brand}</span>
-              </>
-            ) : 'Live queue'}
-          </h1>
-        </div>
+        <h1 className="text-2xl font-semibold">Leads</h1>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowUpload(!showUpload)}
+            className="inline-flex items-center gap-2 rounded-lg bg-kynp-yellow text-kynp-black px-3 py-2 text-xs font-semibold hover:brightness-110"
+          >
+            <Upload className="size-3.5" /> Upload Leads
+          </button>
           <button
             onClick={handleManualDispatch}
             disabled={isDispatching}
-            className="inline-flex items-center gap-2 rounded-lg bg-foreground/10 hover:bg-foreground/15 px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg bg-foreground/10 hover:bg-foreground/15 px-3 py-2 text-xs font-medium disabled:opacity-50"
           >
-            {isDispatching ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-            Dispatch now
+            {isDispatching ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+            Send 1
           </button>
         </div>
       </div>
 
-      {data?.stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <MiniStat label="Total" value={data.stats.total} />
-          <MiniStat label="Queued" value={data.stats.pending} />
-          <MiniStat label="Sent" value={data.stats.sent} accent />
-          <MiniStat label="Followed up" value={data.stats.followedUp} accent />
+      {/* Upload section */}
+      {showUpload && (
+        <div className="rounded-lg border border-foreground/15 p-5 space-y-4 bg-foreground/[0.02]">
+          <div className="flex items-center gap-2">
+            <FileText className="size-4 text-kynp-yellow" />
+            <p className="text-sm font-medium">Upload a CSV file with leads</p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block">
+              <span className="text-xs text-muted-foreground">CSV format: name, email, company, message (one per line)</span>
+              <input
+                type="file"
+                accept=".csv,.txt"
+                onChange={handleFileUpload}
+                className="mt-1 w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-kynp-yellow file:px-3 file:py-2 file:text-kynp-black file:font-medium file:cursor-pointer"
+              />
+            </label>
+          </div>
+
+          {fileData.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">{fileData.length} leads parsed. {fileData.filter(l => l.email).length} have valid emails.</p>
+
+              {/* Gmail selection */}
+              {activeGmails.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium">Select Gmail(s) to send from:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {activeGmails.map((g: any) => (
+                      <label key={g.slot} className={cn(
+                        'flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs cursor-pointer',
+                        gmailSlots.includes(g.slot) ? 'border-kynp-yellow bg-kynp-yellow/10' : 'border-foreground/15'
+                      )}>
+                        <input
+                          type="checkbox"
+                          checked={gmailSlots.includes(g.slot)}
+                          onChange={(e) => {
+                            setGmailSlots(e.target.checked
+                              ? [...gmailSlots, g.slot]
+                              : gmailSlots.filter(s => s !== g.slot))
+                          }}
+                          className="size-3 accent-kynp-yellow"
+                        />
+                        {g.email}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={handleUploadAndSend}
+                disabled={uploading || gmailSlots.length === 0}
+                className="inline-flex items-center gap-2 rounded-md bg-kynp-black text-kynp-yellow px-4 py-2 text-sm font-semibold disabled:opacity-50"
+              >
+                {uploading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                {uploading ? 'Sending...' : `Send to ${fileData.filter(l => l.email).length} leads`}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Live queue */}
-      <div className="rounded-2xl border border-foreground/10 overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-foreground/10 flex items-center justify-between bg-foreground/[0.02]">
-          <p className="text-sm font-medium">Outreach queue</p>
-          <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1.5">
-            <Clock className="size-3" /> auto-dispatch every 30s · tap any lead to view message
-          </span>
+      {/* Stats */}
+      {data?.stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <MiniStat label="Total" value={data.stats.total} />
+          <MiniStat label="Pending" value={data.stats.pending} />
+          <MiniStat label="Sent" value={data.stats.sent} accent />
+          <MiniStat label="Failed" value={data.stats.failed} />
+        </div>
+      )}
+
+      {/* Lead list */}
+      <div className="rounded-lg border border-foreground/10 overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-foreground/10 text-xs text-muted-foreground">
+          30s auto-dispatch · tap any lead to view message
         </div>
         {isLoading ? (
-          <div className="p-12 flex justify-center">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          <div className="p-8 flex justify-center">
+            <Loader2 className="size-4 animate-spin text-muted-foreground" />
           </div>
         ) : data && data.leads.length > 0 ? (
-          <ul className="divide-y divide-foreground/10 max-h-[640px] overflow-y-auto kynp-scroll">
-            {data.leads.map((lead) => (
-              <LeadCard key={lead.id} lead={lead} />
-            ))}
+          <ul className="divide-y divide-foreground/10 max-h-[600px] overflow-y-auto kynp-scroll">
+            {data.leads.map((lead) => <LeadCard key={lead.id} lead={lead} />)}
           </ul>
         ) : (
-          <div className="p-12 text-center text-sm text-muted-foreground">
-            No leads yet — start a campaign to populate the queue.
-          </div>
+          <div className="p-8 text-center text-sm text-muted-foreground">No leads yet.</div>
         )}
       </div>
     </section>
@@ -229,112 +327,33 @@ export function LeadsView() {
 function LeadCard({ lead }: { lead: LeadRow }) {
   const [expanded, setExpanded] = React.useState(false)
   const meta = STATUS_META[lead.status] ?? STATUS_META.pending
-  const initials = lead.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
-  const hasFollowUp = lead.followUpMessage && lead.status === 'followed_up'
 
   return (
     <li>
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="w-full text-left px-5 py-4 hover:bg-foreground/[0.02] transition-colors"
-      >
+      <button onClick={() => setExpanded(v => !v)} className="w-full text-left px-4 py-3 hover:bg-foreground/[0.02]">
         <div className="flex items-start gap-3">
-          <div className="size-9 rounded-full bg-kynp-yellow/15 text-kynp-yellow text-xs font-semibold flex items-center justify-center shrink-0">
-            {initials}
+          <div className="size-8 rounded-full bg-kynp-yellow/15 text-kynp-yellow text-[10px] font-semibold flex items-center justify-center shrink-0">
+            {lead.name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-medium">{lead.name}</p>
-              <span className={cn('text-[11px] inline-flex items-center gap-1 uppercase tracking-wider', meta.color)}>
-                <span className={cn('size-1.5 rounded-full', meta.dot)} />
-                {meta.label}
+              <span className={cn('text-[10px] inline-flex items-center gap-1 uppercase', meta.color)}>
+                <span className={cn('size-1.5 rounded-full', meta.dot)} />{meta.label}
               </span>
-              {lead.gmailSlot && (
-                <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
-                  <Mail className="size-2.5" /> Gmail #{lead.gmailSlot}
-                </span>
-              )}
-              {lead.sentAt && (
-                <span className="text-[10px] text-muted-foreground">
-                  {new Date(lead.sentAt).toLocaleString()}
-                </span>
-              )}
+              {lead.gmailSlot && <span className="text-[10px] text-muted-foreground">Gmail #{lead.gmailSlot}</span>}
+              {lead.sentAt && <span className="text-[10px] text-muted-foreground">{new Date(lead.sentAt).toLocaleString()}</span>}
             </div>
-            <p className="text-xs text-muted-foreground truncate mt-0.5">
-              {lead.email} · {lead.company} {lead.position ? `· ${lead.position}` : ''}
-            </p>
-            <p className={cn('text-xs mt-2 text-foreground/70', !expanded && 'line-clamp-2')}>
-              {lead.message.split('\n')[0]}{lead.message.split('\n')[1] ? '...' : ''}
-            </p>
+            <p className="text-xs text-muted-foreground truncate">{lead.email}</p>
           </div>
-          <div className="shrink-0 mt-1">
-            {expanded ? (
-              <ChevronUp className="size-4 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="size-4 text-muted-foreground" />
-            )}
-          </div>
+          {expanded ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
         </div>
       </button>
-
-      {/* Expanded view — full message + follow-up */}
       {expanded && (
-        <div className="px-5 pb-5 pt-1 ml-12 space-y-3">
-          {/* Lead metadata */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <Globe2 className="size-3" /> {lead.email}
-            </div>
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <Building2 className="size-3" /> {lead.company}
-            </div>
-            {lead.position && (
-              <div className="text-muted-foreground">{lead.position}</div>
-            )}
+        <div className="px-4 pb-3 ml-11">
+          <div className="rounded-md bg-foreground/[0.04] border border-foreground/10 px-3 py-2">
+            <p className="text-xs whitespace-pre-wrap text-foreground/85 leading-relaxed">{lead.message}</p>
           </div>
-
-          {/* Initial message */}
-          <div className="rounded-lg bg-foreground/[0.04] border border-foreground/10 px-3.5 py-3">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] uppercase tracking-wider text-kynp-yellow inline-flex items-center gap-1">
-                <Send className="size-3" /> Initial message
-                {lead.sentAt && (
-                  <span className="text-muted-foreground ml-2 normal-case tracking-normal">
-                    · sent {new Date(lead.sentAt).toLocaleString()}
-                  </span>
-                )}
-              </p>
-            </div>
-            <p className="text-xs whitespace-pre-wrap text-foreground/90 leading-relaxed">
-              {lead.message}
-            </p>
-          </div>
-
-          {/* Follow-up message */}
-          {lead.followUpMessage && (
-            <div className={cn(
-              'rounded-lg border px-3.5 py-3',
-              hasFollowUp
-                ? 'bg-emerald-500/[0.04] border-emerald-500/20'
-                : 'bg-foreground/[0.02] border-foreground/10',
-            )}>
-              <p className={cn(
-                'text-[10px] uppercase tracking-wider mb-2 inline-flex items-center gap-1',
-                hasFollowUp ? 'text-emerald-500' : 'text-muted-foreground',
-              )}>
-                <CornerUpRight className="size-3" />
-                {hasFollowUp ? 'Follow-up sent' : 'Follow-up ready (24h after initial)'}
-                {lead.followedUpAt && (
-                  <span className="ml-2 normal-case tracking-normal text-muted-foreground">
-                    · sent {new Date(lead.followedUpAt).toLocaleString()}
-                  </span>
-                )}
-              </p>
-              <p className="text-xs whitespace-pre-wrap text-foreground/90 leading-relaxed">
-                {lead.followUpMessage}
-              </p>
-            </div>
-          )}
         </div>
       )}
     </li>
@@ -343,9 +362,33 @@ function LeadCard({ lead }: { lead: LeadRow }) {
 
 function MiniStat({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
   return (
-    <div className="rounded-xl border border-foreground/10 px-3.5 py-3 bg-foreground/[0.02]">
+    <div className="rounded-lg border border-foreground/10 px-3 py-2">
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className={cn('text-xl font-semibold tabular-nums mt-0.5', accent && 'text-kynp-yellow')}>{value}</p>
+      <p className={cn('text-lg font-semibold tabular-nums mt-0.5', accent && 'text-kynp-yellow')}>{value}</p>
     </div>
   )
+}
+
+function parseCSVLine(line: string): string[] {
+  const result: string[] = []
+  let current = ''
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i]
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"'
+        i++
+      } else {
+        inQuotes = !inQuotes
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current)
+      current = ''
+    } else {
+      current += char
+    }
+  }
+  result.push(current)
+  return result
 }
