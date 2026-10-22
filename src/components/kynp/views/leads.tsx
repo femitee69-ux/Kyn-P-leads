@@ -196,101 +196,184 @@ export function LeadsView() {
     }
   }
 
-  if (!campaignId) {
-    return (
-      <section className="space-y-4">
-        <h1 className="text-2xl font-semibold">Leads</h1>
-        <p className="text-sm text-muted-foreground">Start a campaign first.</p>
-      </section>
-    )
+  const activeGmails = (gmailsData?.gmails ?? []).filter((g: any) => g.active)
+
+  // Auto-create a campaign if none exists (for upload feature)
+  const handleUploadAndSendWithCampaign = async () => {
+    if (!campaignId) {
+      // Auto-create a campaign first
+      try {
+        const res = await fetch('/api/campaigns/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            country: 'Upload',
+            brand: 'Uploaded Leads',
+            service: 'Direct Outreach',
+            targetLeads: fileData.length || 100,
+            followUp: false,
+            gmailSlots,
+          }),
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error || 'Failed to create campaign')
+        setCampaign(json.campaignId, 'running')
+        // Now upload + send
+        await handleUploadAndSend(json.campaignId)
+      } catch (e: any) {
+        toast.error(e.message)
+      }
+    } else {
+      await handleUploadAndSend(campaignId)
+    }
   }
 
-  const activeGmails = (gmailsData?.gmails ?? []).filter((g: any) => g.active)
+  const handleUploadAndSend = async (cid?: string) => {
+    const id = cid || campaignId
+    if (!id) {
+      toast.error('Start a campaign first.')
+      return
+    }
+    if (fileData.length === 0) {
+      toast.error('No leads to upload.')
+      return
+    }
+    if (gmailSlots.length === 0) {
+      toast.error('Select at least 1 Gmail to send from.')
+      return
+    }
+
+    setUploading(true)
+    pushLog(`Uploading ${fileData.length} leads and sending via ${gmailSlots.length} Gmail(s)...`)
+
+    try {
+      const res = await fetch('/api/leads/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId: id, leads: fileData, gmailSlots }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'upload failed')
+
+      toast.success(`Sent ${json.dispatched} emails, ${json.failed} failed. Check your Gmail Sent folder.`)
+      pushLog(`Upload complete: ${json.saved} saved, ${json.dispatched} sent, ${json.failed} failed.`)
+      setFileData([])
+      qc.invalidateQueries({ queryKey: ['leads', id] })
+      qc.invalidateQueries({ queryKey: ['status'] })
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setUploading(false)
+    }
+  }
 
   return (
     <section className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Leads</h1>
+      <h1 className="text-2xl font-semibold">Leads</h1>
+
+      {/* Upload section — always visible */}
+      <div className="rounded-lg border border-kynp-yellow/30 bg-kynp-yellow/[0.04] p-5 space-y-4">
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowUpload(!showUpload)}
-            className="inline-flex items-center gap-2 rounded-lg bg-kynp-yellow text-kynp-black px-3 py-2 text-xs font-semibold hover:brightness-110"
-          >
-            <Upload className="size-3.5" /> Upload Leads
-          </button>
+          <Upload className="size-4 text-kynp-yellow" />
+          <p className="text-sm font-medium">Upload Leads File</p>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block">
+            <span className="text-xs text-muted-foreground">CSV format: name, email, company, message (one per line)</span>
+            <input
+              type="file"
+              accept=".csv,.txt"
+              onChange={handleFileUpload}
+              className="mt-1 w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-kynp-yellow file:px-4 file:py-2.5 file:text-kynp-black file:font-semibold file:cursor-pointer hover:file:brightness-110"
+            />
+          </label>
+        </div>
+
+        {fileData.length > 0 && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              {fileData.length} leads parsed. {fileData.filter(l => l.email).length} have valid emails.
+            </p>
+
+            {activeGmails.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium">Select Gmail(s) to send from:</p>
+                <div className="flex flex-wrap gap-2">
+                  {activeGmails.map((g: any) => (
+                    <label key={g.slot} className={cn(
+                      'flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs cursor-pointer',
+                      gmailSlots.includes(g.slot) ? 'border-kynp-yellow bg-kynp-yellow/10' : 'border-foreground/15'
+                    )}>
+                      <input
+                        type="checkbox"
+                        checked={gmailSlots.includes(g.slot)}
+                        onChange={(e) => {
+                          setGmailSlots(e.target.checked
+                            ? [...gmailSlots, g.slot]
+                            : gmailSlots.filter(s => s !== g.slot))
+                        }}
+                        className="size-3 accent-kynp-yellow"
+                      />
+                      {g.email}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={handleUploadAndSendWithCampaign}
+              disabled={uploading || gmailSlots.length === 0}
+              className="inline-flex items-center gap-2 rounded-md bg-kynp-black text-kynp-yellow px-4 py-2 text-sm font-semibold disabled:opacity-50"
+            >
+              {uploading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              {uploading ? 'Sending...' : `Send to ${fileData.filter(l => l.email).length} leads`}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {campaignId && (
+        <>
+          {/* Stats */}
+          {data?.stats && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <MiniStat label="Total" value={data.stats.total} />
+              <MiniStat label="Pending" value={data.stats.pending} />
+              <MiniStat label="Sent" value={data.stats.sent} accent />
+              <MiniStat label="Failed" value={data.stats.failed} />
+            </div>
+          )}
+
+          {/* Dispatch button */}
           <button
             onClick={handleManualDispatch}
             disabled={isDispatching}
             className="inline-flex items-center gap-2 rounded-lg bg-foreground/10 hover:bg-foreground/15 px-3 py-2 text-xs font-medium disabled:opacity-50"
           >
             {isDispatching ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
-            Send 1
+            Send 1 now
           </button>
-        </div>
-      </div>
 
-      {/* Upload section */}
-      {showUpload && (
-        <div className="rounded-lg border border-foreground/15 p-5 space-y-4 bg-foreground/[0.02]">
-          <div className="flex items-center gap-2">
-            <FileText className="size-4 text-kynp-yellow" />
-            <p className="text-sm font-medium">Upload a CSV file with leads</p>
-          </div>
-
-          <div className="space-y-2">
-            <label className="block">
-              <span className="text-xs text-muted-foreground">CSV format: name, email, company, message (one per line)</span>
-              <input
-                type="file"
-                accept=".csv,.txt"
-                onChange={handleFileUpload}
-                className="mt-1 w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-kynp-yellow file:px-3 file:py-2 file:text-kynp-black file:font-medium file:cursor-pointer"
-              />
-            </label>
-          </div>
-
-          {fileData.length > 0 && (
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">{fileData.length} leads parsed. {fileData.filter(l => l.email).length} have valid emails.</p>
-
-              {/* Gmail selection */}
-              {activeGmails.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium">Select Gmail(s) to send from:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {activeGmails.map((g: any) => (
-                      <label key={g.slot} className={cn(
-                        'flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs cursor-pointer',
-                        gmailSlots.includes(g.slot) ? 'border-kynp-yellow bg-kynp-yellow/10' : 'border-foreground/15'
-                      )}>
-                        <input
-                          type="checkbox"
-                          checked={gmailSlots.includes(g.slot)}
-                          onChange={(e) => {
-                            setGmailSlots(e.target.checked
-                              ? [...gmailSlots, g.slot]
-                              : gmailSlots.filter(s => s !== g.slot))
-                          }}
-                          className="size-3 accent-kynp-yellow"
-                        />
-                        {g.email}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <button
-                onClick={handleUploadAndSend}
-                disabled={uploading || gmailSlots.length === 0}
-                className="inline-flex items-center gap-2 rounded-md bg-kynp-black text-kynp-yellow px-4 py-2 text-sm font-semibold disabled:opacity-50"
-              >
-                {uploading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                {uploading ? 'Sending...' : `Send to ${fileData.filter(l => l.email).length} leads`}
-              </button>
+          {/* Lead list */}
+          <div className="rounded-lg border border-foreground/10 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-foreground/10 text-xs text-muted-foreground">
+              30s auto-dispatch · tap any lead to view message
             </div>
-          )}
-        </div>
+            {isLoading ? (
+              <div className="p-8 flex justify-center">
+                <Loader2 className="size-4 animate-spin text-muted-foreground" />
+              </div>
+            ) : data && data.leads.length > 0 ? (
+              <ul className="divide-y divide-foreground/10 max-h-[600px] overflow-y-auto kynp-scroll">
+                {data.leads.map((lead) => <LeadCard key={lead.id} lead={lead} />)}
+              </ul>
+            ) : (
+              <div className="p-8 text-center text-sm text-muted-foreground">No leads yet. Upload a file above.</div>
+            )}
+          </div>
+        </>
       )}
 
       {/* Stats */}
