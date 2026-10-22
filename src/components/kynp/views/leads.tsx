@@ -243,13 +243,22 @@ export function LeadsView() {
         </div>
 
         <div className="space-y-2">
-          <label className="block">
-            <span className="text-xs text-muted-foreground">CSV format: name, email, company, message</span>
+          <p className="text-xs text-muted-foreground">CSV format: name, email, company, message</p>
+          <label className="block w-full cursor-pointer">
+            <div className="flex items-center justify-center w-full h-14 rounded-lg border-2 border-dashed border-kynp-yellow/50 bg-kynp-yellow/[0.06] hover:bg-kynp-yellow/[0.12] transition-colors">
+              <div className="flex flex-col items-center gap-1">
+                <Upload className="size-5 text-kynp-yellow" />
+                <span className="text-sm font-medium text-kynp-yellow">
+                  {fileData.length > 0 ? `${fileData.length} leads loaded — tap to change` : 'Tap to select a CSV file'}
+                </span>
+              </div>
+            </div>
             <input
               type="file"
-              accept=".csv,.txt"
+              accept=".csv,.txt,.xlsx"
               onChange={handleFileUpload}
-              className="mt-1 w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-kynp-yellow file:px-4 file:py-2.5 file:text-kynp-black file:font-semibold file:cursor-pointer hover:file:brightness-110"
+              className="sr-only"
+              style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' }}
             />
           </label>
         </div>
