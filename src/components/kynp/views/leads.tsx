@@ -157,45 +157,6 @@ export function LeadsView() {
     toast.success(`Parsed ${leads.length} leads from file. ${leads.filter(l => l.email).length} have emails.`)
   }
 
-  const handleUploadAndSend = async () => {
-    if (!campaignId) {
-      toast.error('Start a campaign first, then upload leads.')
-      return
-    }
-    if (fileData.length === 0) {
-      toast.error('No leads to upload.')
-      return
-    }
-    if (gmailSlots.length === 0) {
-      toast.error('Select at least 1 Gmail to send from.')
-      return
-    }
-
-    setUploading(true)
-    pushLog(`Uploading ${fileData.length} leads and sending via ${gmailSlots.length} Gmail(s)...`)
-
-    try {
-      const res = await fetch('/api/leads/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId, leads: fileData, gmailSlots }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'upload failed')
-
-      toast.success(`Sent ${json.dispatched} emails, ${json.failed} failed. Check your Gmail Sent folder.`)
-      pushLog(`Upload complete: ${json.saved} saved, ${json.dispatched} sent, ${json.failed} failed.`)
-      setFileData([])
-      setShowUpload(false)
-      qc.invalidateQueries({ queryKey: ['leads', campaignId] })
-      qc.invalidateQueries({ queryKey: ['status'] })
-    } catch (e: any) {
-      toast.error(e.message)
-    } finally {
-      setUploading(false)
-    }
-  }
-
   const activeGmails = (gmailsData?.gmails ?? []).filter((g: any) => g.active)
 
   // Auto-create a campaign if none exists (for upload feature)
