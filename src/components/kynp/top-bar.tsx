@@ -69,7 +69,6 @@ export function TopBar() {
               Kyn&rsquo;P <span className="text-kynp-yellow">Leads</span>
             </p>
             <p className="text-[10px] text-muted-foreground tracking-widest uppercase mt-0.5">
-              Find &middot; Compose &middot; Send &middot; Follow up
             </p>
           </div>
         </button>
