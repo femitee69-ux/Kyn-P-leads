@@ -19,16 +19,17 @@ import {
   Mail,
   History,
   ChevronRight,
+  Upload,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV: { key: ViewKey; label: string; hint: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { key: 'dashboard', label: 'Dashboard', hint: 'Status · Start / Stop', icon: LayoutGrid },
-  { key: 'campaign', label: 'New Campaign', hint: 'Country · Brand · Service', icon: Megaphone },
-  { key: 'leads', label: 'Leads & Messages', hint: 'Live queue', icon: ListChecks },
+  { key: 'dashboard', label: 'Dashboard', hint: 'Status', icon: LayoutGrid },
+  { key: 'campaign', label: 'New Campaign', hint: 'Find leads', icon: Megaphone },
+  { key: 'leads', label: 'Leads', hint: 'View + Upload', icon: ListChecks },
   { key: 'apikeys', label: 'API Keys', hint: 'Serper.dev', icon: KeyRound },
-  { key: 'gmails', label: 'Gmail Accounts', hint: '5 slots · auto-rotate', icon: Mail },
-  { key: 'history', label: 'Campaign History', hint: 'Past runs', icon: History },
+  { key: 'gmails', label: 'Gmail Accounts', hint: '5 slots', icon: Mail },
+  { key: 'history', label: 'History', hint: 'Past runs', icon: History },
 ]
 
 export function AccountSheet() {
