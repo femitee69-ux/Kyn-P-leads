@@ -159,27 +159,30 @@ export function LeadsView() {
 
   const activeGmails = (gmailsData?.gmails ?? []).filter((g: any) => g.active)
 
-  // Auto-create a campaign if none exists (for upload feature)
+  // Auto-select all Gmails by default
+  React.useEffect(() => {
+    if (activeGmails.length > 0 && gmailSlots.length === 0) {
+      setGmailSlots(activeGmails.map((g: any) => g.slot))
+    }
+  }, [activeGmails])
+
+  // Auto-create an empty campaign (no Serper needed) + upload + send
   const handleUploadAndSendWithCampaign = async () => {
     if (!campaignId) {
-      // Auto-create a campaign first
       try {
-        const res = await fetch('/api/campaigns/start', {
+        // Create empty campaign (doesn't need Serper — user provides their own leads)
+        const res = await fetch('/api/campaigns/create-empty', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            country: 'Upload',
             brand: 'Uploaded Leads',
             service: 'Direct Outreach',
             targetLeads: fileData.length || 100,
-            followUp: false,
-            gmailSlots,
           }),
         })
         const json = await res.json()
         if (!res.ok) throw new Error(json.error || 'Failed to create campaign')
         setCampaign(json.campaignId, 'running')
-        // Now upload + send
         await handleUploadAndSend(json.campaignId)
       } catch (e: any) {
         toast.error(e.message)
@@ -241,7 +244,7 @@ export function LeadsView() {
 
         <div className="space-y-2">
           <label className="block">
-            <span className="text-xs text-muted-foreground">CSV format: name, email, company, message (one per line)</span>
+            <span className="text-xs text-muted-foreground">CSV format: name, email, company, message</span>
             <input
               type="file"
               accept=".csv,.txt"
@@ -251,47 +254,52 @@ export function LeadsView() {
           </label>
         </div>
 
-        {fileData.length > 0 && (
-          <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              {fileData.length} leads parsed. {fileData.filter(l => l.email).length} have valid emails.
-            </p>
-
-            {activeGmails.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-medium">Select Gmail(s) to send from:</p>
-                <div className="flex flex-wrap gap-2">
-                  {activeGmails.map((g: any) => (
-                    <label key={g.slot} className={cn(
-                      'flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs cursor-pointer',
-                      gmailSlots.includes(g.slot) ? 'border-kynp-yellow bg-kynp-yellow/10' : 'border-foreground/15'
-                    )}>
-                      <input
-                        type="checkbox"
-                        checked={gmailSlots.includes(g.slot)}
-                        onChange={(e) => {
-                          setGmailSlots(e.target.checked
-                            ? [...gmailSlots, g.slot]
-                            : gmailSlots.filter(s => s !== g.slot))
-                        }}
-                        className="size-3 accent-kynp-yellow"
-                      />
-                      {g.email}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={handleUploadAndSendWithCampaign}
-              disabled={uploading || gmailSlots.length === 0}
-              className="inline-flex items-center gap-2 rounded-md bg-kynp-black text-kynp-yellow px-4 py-2 text-sm font-semibold disabled:opacity-50"
-            >
-              {uploading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-              {uploading ? 'Sending...' : `Send to ${fileData.filter(l => l.email).length} leads`}
-            </button>
+        {/* Gmail selection — always visible */}
+        {activeGmails.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium">Select Gmail(s) to send from:</p>
+            <div className="flex flex-wrap gap-2">
+              {activeGmails.map((g: any) => (
+                <label key={g.slot} className={cn(
+                  'flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs cursor-pointer',
+                  gmailSlots.includes(g.slot) ? 'border-kynp-yellow bg-kynp-yellow/10' : 'border-foreground/15'
+                )}>
+                  <input
+                    type="checkbox"
+                    checked={gmailSlots.includes(g.slot)}
+                    onChange={(e) => {
+                      setGmailSlots(e.target.checked
+                        ? [...gmailSlots, g.slot]
+                        : gmailSlots.filter(s => s !== g.slot))
+                    }}
+                    className="size-3 accent-kynp-yellow"
+                  />
+                  {g.email}
+                </label>
+              ))}
+            </div>
           </div>
+        )}
+
+        {/* Send button — enabled when file has leads with emails + at least 1 Gmail selected */}
+        {fileData.filter(l => l.email).length > 0 && (
+          <button
+            onClick={handleUploadAndSendWithCampaign}
+            disabled={uploading || gmailSlots.length === 0}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-semibold transition-all",
+              uploading || gmailSlots.length === 0
+                ? "bg-foreground/10 text-muted-foreground cursor-not-allowed"
+                : "bg-kynp-black text-kynp-yellow hover:bg-kynp-ink"
+            )}
+          >
+            {uploading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            {uploading ? 'Sending...' : `Send to ${fileData.filter(l => l.email).length} leads`}
+          </button>
+        )}
+
+        {fileData.length > 0 && fileData.filter(l => l.email).length === 0 && (
+          <p className="text-xs text-red-500">No leads with valid emails found in the file.</p>
         )}
       </div>
 
