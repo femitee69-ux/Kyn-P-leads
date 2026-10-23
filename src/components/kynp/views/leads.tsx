@@ -308,17 +308,21 @@ export function LeadsView() {
           </div>
         )}
 
-        {/* Send button — enabled when file has leads with emails + at least 1 Gmail selected */}
+        {/* Send button — always clickable when leads have emails */}
         {fileData.filter(l => l.email).length > 0 && (
           <button
-            onClick={handleUploadAndSendWithCampaign}
-            disabled={uploading || gmailSlots.length === 0}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-semibold transition-all",
-              uploading || gmailSlots.length === 0
-                ? "bg-foreground/10 text-muted-foreground cursor-not-allowed"
-                : "bg-kynp-black text-kynp-yellow hover:bg-kynp-ink"
-            )}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (uploading) return
+              if (gmailSlots.length === 0) {
+                toast.error('Select at least 1 Gmail')
+                return
+              }
+              handleUploadAndSendWithCampaign()
+            }}
+            style={{ pointerEvents: 'auto', cursor: 'pointer', touchAction: 'manipulation' }}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-kynp-black text-kynp-yellow px-4 py-3 text-sm font-semibold hover:bg-kynp-ink w-full sm:w-auto"
           >
             {uploading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
             {uploading ? 'Sending...' : `Send to ${fileData.filter(l => l.email).length} leads`}
