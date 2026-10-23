@@ -242,25 +242,17 @@ export function LeadsView() {
           <p className="text-sm font-medium">Upload Leads File</p>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-3">
           <p className="text-xs text-muted-foreground">CSV format: name, email, company, message</p>
-          <label className="block w-full cursor-pointer">
-            <div className="flex items-center justify-center w-full h-14 rounded-lg border-2 border-dashed border-kynp-yellow/50 bg-kynp-yellow/[0.06] hover:bg-kynp-yellow/[0.12] transition-colors">
-              <div className="flex flex-col items-center gap-1">
-                <Upload className="size-5 text-kynp-yellow" />
-                <span className="text-sm font-medium text-kynp-yellow">
-                  {fileData.length > 0 ? `${fileData.length} leads loaded — tap to change` : 'Tap to select a CSV file'}
-                </span>
-              </div>
-            </div>
-            <input
-              type="file"
-              accept=".csv,.txt,.xlsx"
-              onChange={handleFileUpload}
-              className="sr-only"
-              style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' }}
-            />
-          </label>
+          <input
+            type="file"
+            accept=".csv,.txt,.xlsx,text/csv,application/vnd.ms-excel"
+            onChange={handleFileUpload}
+            className="block w-full text-sm text-foreground border border-foreground/15 rounded-lg px-3 py-3 cursor-pointer bg-background hover:bg-foreground/[0.03]"
+          />
+          {fileData.length > 0 && (
+            <p className="text-xs text-muted-foreground">{fileData.length} leads loaded. {fileData.filter(l => l.email).length} have valid emails.</p>
+          )}
         </div>
 
         {/* Gmail selection — always visible */}
