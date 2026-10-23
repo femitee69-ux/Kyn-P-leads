@@ -65,7 +65,7 @@ export function LeadsView() {
   const [uploading, setUploading] = React.useState(false)
   const [fileData, setFileData] = React.useState<Array<{ name: string; email: string; company: string; message: string }>>([])
   const [gmailSlots, setGmailSlots] = React.useState<number[]>([])
-  const [showUpload, setShowUpload] = React.useState(false)
+  const [pasteText, setPasteText] = React.useState('')
 
   // Fetch Gmails
   const { data: gmailsData } = useQuery({
@@ -243,16 +243,42 @@ export function LeadsView() {
         </div>
 
         <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">CSV format: name, email, company, message</p>
+          <p className="text-xs text-muted-foreground">Upload a CSV file OR paste leads below</p>
+          {/* Option 1: File upload — NO accept restriction (all files visible) */}
           <input
             type="file"
-            accept=".csv,.txt,.xlsx,text/csv,application/vnd.ms-excel"
             onChange={handleFileUpload}
             className="block w-full text-sm text-foreground border border-foreground/15 rounded-lg px-3 py-3 cursor-pointer bg-background hover:bg-foreground/[0.03]"
           />
           {fileData.length > 0 && (
             <p className="text-xs text-muted-foreground">{fileData.length} leads loaded. {fileData.filter(l => l.email).length} have valid emails.</p>
           )}
+
+          {/* Option 2: Paste leads directly */}
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Or paste leads here (one per line):<br/>Format: name, email, company, message</p>
+            <textarea
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              placeholder={"John Doe,john@company.com,ACME Inc,Hi John...\nJane,jane@gmail.com,Globex,Hi Jane..."}
+              rows={5}
+              className="w-full rounded-lg bg-background border border-foreground/15 px-3 py-2 text-xs font-mono placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-kynp-yellow/30 resize-y"
+            />
+            <button
+              onClick={() => {
+                const lines = pasteText.split('\n').filter(l => l.trim())
+                const leads = lines.map(line => {
+                  const cols = line.split(',').map(c => c.trim())
+                  return { name: cols[0] || '', email: cols[1] || '', company: cols[2] || '', message: cols[3] || '' }
+                })
+                setFileData(leads)
+                toast.success(`Parsed ${leads.length} leads. ${leads.filter(l => l.email).length} have valid emails.`)
+              }}
+              className="text-xs rounded-md bg-foreground/10 hover:bg-foreground/15 px-3 py-1.5"
+            >
+              Parse pasted leads
+            </button>
+          </div>
         </div>
 
         {/* Gmail selection — always visible */}
